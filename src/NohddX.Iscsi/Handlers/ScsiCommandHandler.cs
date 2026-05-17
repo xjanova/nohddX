@@ -246,44 +246,70 @@ public class ScsiCommandHandler
         if (session.DiskStream == null)
             return new List<IscsiPdu> { IscsiPdu.BuildScsiResponse(request, session, IscsiConstants.StatusCheckCondition) };
 
-        long offset = lba * IscsiConstants.SectorSize;
+        long diskOffset = lba * IscsiConstants.SectorSize;
         int totalBytes = (int)(sectorCount * IscsiConstants.SectorSize);
 
         if (totalBytes == 0)
             return new List<IscsiPdu> { IscsiPdu.BuildScsiResponse(request, session, IscsiConstants.StatusGood) };
 
-        var pdus = new List<IscsiPdu>();
-        int bytesRemaining = totalBytes;
-        int dataOffset = 0;
-
-        // Respect the per-session negotiated MaxRecvDataSegmentLength so we
-        // never exceed what the initiator (e.g. iPXE) is buffering for.
+        // Two-level chunking per RFC 3720:
+        //   * MaxRecvDataSegmentLength caps a SINGLE PDU's data segment.
+        //   * MaxBurstLength caps a SEQUENCE of PDUs the target may send
+        //     before pausing (= "burst"). At each burst boundary F=1,
+        //     DataSN resets to 0; only the LAST burst additionally sets the
+        //     S-bit + SCSI status.
+        // BufferOffset always advances regardless of burst boundary — it's
+        // a running offset in the initiator's SCSI buffer.
         int maxPayload = Math.Clamp(session.MaxRecvDataSegmentLength, 512, MaxDataInPayloadCap);
+        int maxBurst = Math.Clamp(session.MaxBurstLength, maxPayload, MaxDataInPayloadCap);
+
+        var pdus = new List<IscsiPdu>();
+        int bufferOffset = 0;
+        int bytesRemaining = totalBytes;
 
         while (bytesRemaining > 0)
         {
-            int chunkSize = Math.Min(bytesRemaining, maxPayload);
-            var buffer = new byte[chunkSize];
+            int burstBudget = Math.Min(bytesRemaining, maxBurst);
+            uint dataSn = 0;
 
-            session.DiskStream.Position = offset + dataOffset;
-            int bytesRead = await session.DiskStream.ReadAsync(buffer.AsMemory(0, chunkSize));
-
-            if (bytesRead < chunkSize)
+            while (burstBudget > 0)
             {
-                // If we read fewer bytes (e.g., near end of disk), adjust
-                var actual = new byte[bytesRead];
-                Array.Copy(buffer, actual, bytesRead);
-                buffer = actual;
+                int chunkSize = Math.Min(burstBudget, maxPayload);
+                var buffer = new byte[chunkSize];
+
+                session.DiskStream.Position = diskOffset + bufferOffset;
+                int bytesRead = await session.DiskStream.ReadAsync(buffer.AsMemory(0, chunkSize));
+
+                if (bytesRead < chunkSize)
+                {
+                    // Short read near end of disk — shrink buffer.
+                    var actual = new byte[bytesRead];
+                    Array.Copy(buffer, actual, bytesRead);
+                    buffer = actual;
+                }
+                if (buffer.Length == 0)
+                    break;
+
+                burstBudget -= buffer.Length;
+                bytesRemaining -= buffer.Length;
+
+                bool isBurstFinal = burstBudget == 0 || bytesRemaining == 0;
+                bool isCommandFinal = bytesRemaining == 0;
+
+                // 0xFF is the "no SCSI status here" sentinel that ToBytes()
+                // checks when deciding whether to set the S-bit + status byte.
+                byte status = isCommandFinal ? IscsiConstants.StatusGood : (byte)0xFF;
+
+                var dataIn = IscsiPdu.BuildDataIn(request, session, buffer,
+                    finalPdu: isBurstFinal,
+                    scsiStatus: status,
+                    dataSn: dataSn,
+                    bufferOffset: (uint)bufferOffset);
+
+                pdus.Add(dataIn);
+                bufferOffset += buffer.Length;
+                dataSn++;
             }
-
-            bytesRemaining -= buffer.Length;
-            dataOffset += buffer.Length;
-
-            bool isFinal = bytesRemaining <= 0;
-            var dataIn = IscsiPdu.BuildDataIn(request, session, buffer, isFinal,
-                isFinal ? IscsiConstants.StatusGood : (byte)0);
-
-            pdus.Add(dataIn);
         }
 
         return pdus;

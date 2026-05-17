@@ -29,6 +29,14 @@ public class IscsiSession
     /// </summary>
     public int MaxRecvDataSegmentLength { get; set; } = 8192;
 
+    /// <summary>
+    /// Per-RFC 3720 §12.13, the maximum bytes the target may transfer in a
+    /// single Data-In sequence (burst). Once exceeded the target MUST set
+    /// F=1, reset DataSN to 0, and start a new sequence. Default 262144 is
+    /// the iSCSI standard default.
+    /// </summary>
+    public int MaxBurstLength { get; set; } = 262144;
+
     /// <summary>Whether the session has completed login and entered full feature phase.</summary>
     public bool IsFullFeaturePhase { get; set; }
 

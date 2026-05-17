@@ -365,6 +365,18 @@ public class IscsiTargetService : BackgroundService, IIscsiTargetManager
         }
         session.MaxRecvDataSegmentLength = negotiatedMaxRecv;
 
+        // MaxBurstLength: same min-of-offered-and-supported negotiation as
+        // above. Used by ReadSectorsAsync to chunk Data-In into bursts so the
+        // initiator doesn't see a single 16-MB read flooded as one stream.
+        const int RfcDefaultMaxBurst = 262144;
+        int negotiatedMaxBurst = RfcDefaultMaxBurst;
+        if (textParams.TryGetValue("MaxBurstLength", out var maxBurstStr) &&
+            int.TryParse(maxBurstStr, out var offeredBurst) && offeredBurst > 0)
+        {
+            negotiatedMaxBurst = Math.Min(offeredBurst, IscsiConstants.MaxDataSegmentLength);
+        }
+        session.MaxBurstLength = negotiatedMaxBurst;
+
         // HeaderDigest / DataDigest negotiation (RFC 3720 §12.1):
         // initiator sends a comma-list of preferences (e.g. "CRC32C,None");
         // target picks ONE. Our policy is CRC32C-preferred (better integrity),
@@ -383,7 +395,7 @@ public class IscsiTargetService : BackgroundService, IIscsiTargetManager
             ["DefaultTime2Wait"] = "0",
             ["DefaultTime2Retain"] = "0",
             ["MaxRecvDataSegmentLength"] = negotiatedMaxRecv.ToString(),
-            ["MaxBurstLength"] = IscsiConstants.MaxDataSegmentLength.ToString(),
+            ["MaxBurstLength"] = negotiatedMaxBurst.ToString(),
             ["FirstBurstLength"] = IscsiConstants.MaxDataSegmentLength.ToString(),
             ["MaxConnections"] = "1",
             ["InitialR2T"] = "Yes",

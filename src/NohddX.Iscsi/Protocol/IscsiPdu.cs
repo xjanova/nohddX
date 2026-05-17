@@ -200,10 +200,21 @@ public class IscsiPdu
     }
 
     /// <summary>
-    /// Build a Data-In PDU carrying read data.
+    /// Build a Data-In PDU carrying read data. <paramref name="dataSn"/> must
+    /// reset to 0 at the start of each burst (sequence) and increment by 1
+    /// for every PDU within the burst; <paramref name="bufferOffset"/> is the
+    /// running offset in the SCSI read buffer. <paramref name="finalPdu"/>
+    /// marks the last PDU of the burst — the very last burst additionally
+    /// carries the SCSI status byte and the S-bit (handled by ToBytes()).
     /// </summary>
-    public static IscsiPdu BuildDataIn(IscsiPdu request, IscsiSession session, byte[] data,
-        bool finalPdu, byte scsiStatus = IscsiConstants.StatusGood)
+    public static IscsiPdu BuildDataIn(
+        IscsiPdu request,
+        IscsiSession session,
+        byte[] data,
+        bool finalPdu,
+        byte scsiStatus = IscsiConstants.StatusGood,
+        uint dataSn = 0,
+        uint bufferOffset = 0)
     {
         var pdu = new IscsiPdu
         {
@@ -217,6 +228,8 @@ public class IscsiPdu
             MaxCmdSN = session.ExpCmdSN + session.MaxCmdSN,
             DataSegment = data,
             DataSegmentLength = (uint)data.Length,
+            DataSN = dataSn,
+            BufferOffset = bufferOffset,
         };
         return pdu;
     }
@@ -331,15 +344,20 @@ public class IscsiPdu
                 header[1] |= 0x80;
         }
 
-        // Byte 3: Status (for SCSI Response / Data-In)
-        if (Opcode == IscsiConstants.OpcodeScsiResponse || Opcode == IscsiConstants.OpcodeScsiDataIn)
+        // Byte 3: Status — for SCSI Response always; for Data-In only when
+        // the S-bit is set (meaning "this PDU carries the SCSI status, this
+        // is the last PDU of the entire command"). For burst-final-but-not-
+        // command-final Data-In, the caller passes ScsiStatus=0xFF as a
+        // "no status" sentinel; byte 3 stays 0 (reserved) and the S-bit
+        // is left clear.
+        if (Opcode == IscsiConstants.OpcodeScsiResponse)
         {
             header[3] = ScsiStatus;
-            // For Data-In with status, set S bit (bit 0 of byte 1)
-            if (Opcode == IscsiConstants.OpcodeScsiDataIn && Final && ScsiStatus != 0xFF)
-            {
-                header[1] |= 0x01; // S bit
-            }
+        }
+        else if (Opcode == IscsiConstants.OpcodeScsiDataIn && Final && ScsiStatus != 0xFF)
+        {
+            header[1] |= 0x01; // S bit
+            header[3] = ScsiStatus;
         }
 
         // Total AHS length: byte 4
@@ -392,6 +410,18 @@ public class IscsiPdu
             BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(36), R2TSN);
             BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(40), BufferOffset);
             BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(44), DesiredDataTransferLength);
+        }
+
+        // Data-In per RFC 3720 §10.7: DataSN at 36-39 (resets to 0 at the
+        // start of each burst, increments per-PDU), BufferOffset at 40-43
+        // (running offset in the SCSI read buffer). Without these, multi-PDU
+        // reads where the initiator computes the buffer position from
+        // BufferOffset would put the second-and-later PDUs at offset 0,
+        // corrupting the reassembled buffer.
+        if (Opcode == IscsiConstants.OpcodeScsiDataIn)
+        {
+            BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(36), DataSN);
+            BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(40), BufferOffset);
         }
 
         // Build output: header + data segment padded to 4-byte boundary
