@@ -15,10 +15,12 @@ namespace NohddX.Api.Controllers;
 public class GroupsController : ControllerBase
 {
     private readonly IClientGroupRepository _groupRepo;
+    private readonly AuditLogger _audit;
 
-    public GroupsController(IClientGroupRepository groupRepo)
+    public GroupsController(IClientGroupRepository groupRepo, AuditLogger audit)
     {
         _groupRepo = groupRepo;
+        _audit = audit;
     }
 
     [HttpGet]
@@ -62,6 +64,8 @@ public class GroupsController : ControllerBase
         };
 
         var created = await _groupRepo.AddAsync(group, ct);
+        await _audit.RecordAsync("group.create", true, "group", created.Id.ToString(),
+            $"name={created.Name}", ct);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, MapToResponse(created));
     }
 
@@ -86,6 +90,8 @@ public class GroupsController : ControllerBase
 
         group.UpdatedAt = DateTime.UtcNow;
         await _groupRepo.UpdateAsync(group, ct);
+        await _audit.RecordAsync("group.update", true, "group", group.Id.ToString(),
+            $"name={group.Name}", ct);
 
         return Ok(MapToResponse(group));
     }
@@ -100,6 +106,8 @@ public class GroupsController : ControllerBase
             return NotFound();
 
         await _groupRepo.DeleteAsync(id, ct);
+        await _audit.RecordAsync("group.delete", true, "group", id.ToString(),
+            $"name={group.Name}", ct);
         return NoContent();
     }
 

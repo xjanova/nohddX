@@ -20,19 +20,22 @@ public class ClusterController : ControllerBase
     private readonly IClientRepository _clientRepo;
     private readonly ILoadBalancer _loadBalancer;
     private readonly DashboardNotifier _notifier;
+    private readonly AuditLogger _audit;
 
     public ClusterController(
         IClusterService clusterService,
         IClusterNodeRepository nodeRepo,
         IClientRepository clientRepo,
         ILoadBalancer loadBalancer,
-        DashboardNotifier notifier)
+        DashboardNotifier notifier,
+        AuditLogger audit)
     {
         _clusterService = clusterService;
         _nodeRepo = nodeRepo;
         _clientRepo = clientRepo;
         _loadBalancer = loadBalancer;
         _notifier = notifier;
+        _audit = audit;
     }
 
     [HttpGet("nodes")]
@@ -73,6 +76,8 @@ public class ClusterController : ControllerBase
 
         await _clusterService.JoinClusterAsync(request.NodeAddress, ct);
         await _notifier.NotifyClusterStateChangedAsync();
+        await _audit.RecordAsync("cluster.join", true, "cluster", null,
+            $"nodeAddress={request.NodeAddress}", ct);
         return NoContent();
     }
 
@@ -82,6 +87,7 @@ public class ClusterController : ControllerBase
     {
         await _clusterService.LeaveClusterAsync(ct);
         await _notifier.NotifyClusterStateChangedAsync();
+        await _audit.RecordAsync("cluster.leave", true, "cluster", null, null, ct);
         return NoContent();
     }
 
@@ -91,6 +97,7 @@ public class ClusterController : ControllerBase
     {
         await _loadBalancer.RebalanceAsync(ct);
         await _notifier.NotifyClusterStateChangedAsync();
+        await _audit.RecordAsync("cluster.rebalance", true, "cluster", null, null, ct);
         return NoContent();
     }
 
