@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/NohddX.Api/NohddX.Api.csproj" />
+    <Project Path="src/NohddX.Boot/NohddX.Boot.csproj" />
+    <Project Path="src/NohddX.ClientMgmt/NohddX.ClientMgmt.csproj" />
+    <Project Path="src/NohddX.Cluster/NohddX.Cluster.csproj" />
+    <Project Path="src/NohddX.Core/NohddX.Core.csproj" />
+    <Project Path="src/NohddX.Database/NohddX.Database.csproj" />
+    <Project Path="src/NohddX.Iscsi/NohddX.Iscsi.csproj" />
+    <Project Path="src/NohddX.Monitoring/NohddX.Monitoring.csproj" />
+    <Project Path="src/NohddX.Server/NohddX.Server.csproj" />
+    <Project Path="src/NohddX.Storage/NohddX.Storage.csproj" />
+    <Project Path="src/NohddX.Ui/NohddX.Ui.csproj" />
+  </Folder>
+</Solution>

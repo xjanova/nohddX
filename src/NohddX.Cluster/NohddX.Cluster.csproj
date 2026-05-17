@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>NohddX.Cluster</RootNamespace>
+    <AssemblyName>NohddX.Cluster</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NohddX.Core\NohddX.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="DotNext.Net.Cluster" />
+    <PackageReference Include="DotNext.Threading" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+    <PackageReference Include="Grpc.AspNetCore" />
+    <PackageReference Include="Google.Protobuf" />
+  </ItemGroup>
+</Project>

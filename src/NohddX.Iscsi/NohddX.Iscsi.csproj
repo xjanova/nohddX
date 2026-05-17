@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>NohddX.Iscsi</RootNamespace>
+    <AssemblyName>NohddX.Iscsi</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\NohddX.Core\NohddX.Core.csproj" />
+    <ProjectReference Include="..\NohddX.Storage\NohddX.Storage.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="ISCSI" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+</Project>

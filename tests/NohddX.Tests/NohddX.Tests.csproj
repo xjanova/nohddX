@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>NohddX.Tests</RootNamespace>
+    <AssemblyName>NohddX.Tests</AssemblyName>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NohddX.Core\NohddX.Core.csproj" />
+    <ProjectReference Include="..\..\src\NohddX.Storage\NohddX.Storage.csproj" />
+    <ProjectReference Include="..\..\src\NohddX.Iscsi\NohddX.Iscsi.csproj" />
+    <ProjectReference Include="..\..\src\NohddX.Boot\NohddX.Boot.csproj" />
+    <ProjectReference Include="..\..\src\NohddX.Cluster\NohddX.Cluster.csproj" />
+    <ProjectReference Include="..\..\src\NohddX.Database\NohddX.Database.csproj" />
+    <ProjectReference Include="..\..\src\NohddX.ClientMgmt\NohddX.ClientMgmt.csproj" />
+    <ProjectReference Include="..\..\src\NohddX.Api\NohddX.Api.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Moq" />
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" />
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+</Project>

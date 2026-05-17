@@ -1,0 +1,105 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+build/
+bld/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio / Rider / VS Code
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.vcxproj.user
+*.dbmdl
+*.dbproj.schemaview
+*.pubxml.user
+*.publishproj
+
+# .NET specific
+project.lock.json
+project.fragment.lock.json
+artifacts/
+StyleCopReport.xml
+*.[Pp]ublish.xml
+*.azurePubxml
+*.pubxml
+*.pubxml.user
+PublishScripts/
+*_i.c
+*_p.c
+*_h.h
+*.ilk
+*.meta
+*.obj
+*.iobj
+*.pch
+*.pdb
+*.ipdb
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.tmp_proj
+*_wpftmp.csproj
+*.log
+*.vspscc
+*.vssscc
+.builds
+*.pidb
+*.svclog
+*.scc
+
+# NuGet
+*.nupkg
+*.snupkg
+.nuget/
+**/packages/*
+!**/packages/build/
+
+# Local runtime artifacts
+dist/
+*.img
+
+# NohddX-specific runtime/storage
+src/NohddX.Server/storage/
+src/NohddX.Server/logs/
+src/NohddX.Server/nohddx.db
+src/NohddX.Server/nohddx.db-shm
+src/NohddX.Server/nohddx.db-wal
+src/NohddX.Server/*.db
+src/NohddX.Server/*.db-shm
+src/NohddX.Server/*.db-wal
+
+# iPXE binaries — provisioner downloads these, no need to ship
+tools/ipxe/*.efi
+tools/ipxe/*.kpxe
+tools/ipxe/*.lkrn
+tools/iso-builder/cache/
+
+# Local test outputs
+TestResults/
+[Tt]est[Rr]esult*/
+coverage*.json
+coverage*.xml
+coverage*.info
+
+# OS junk
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+*.swp
+*~

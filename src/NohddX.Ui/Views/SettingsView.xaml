@@ -1,0 +1,361 @@
+<UserControl x:Class="NohddX.Ui.Views.SettingsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <DockPanel>
+        <!-- ── Title ── -->
+        <TextBlock DockPanel.Dock="Top" Text="SETTINGS"
+                   Style="{StaticResource HeadingText}"
+                   Margin="0,0,0,16"/>
+
+        <!-- ── Status / actions ── -->
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Margin="0,16,0,0">
+            <TextBlock x:Name="StatusLine"
+                       Foreground="{StaticResource MetalLighterBrush}"
+                       VerticalAlignment="Center" Margin="0,0,12,0"/>
+        </StackPanel>
+
+        <!-- ── Settings Tabs ── -->
+        <TabControl Style="{StaticResource MetalTabControl}">
+
+            <!-- ═══════ Connection ═══════ -->
+            <TabItem Header="Connection" Style="{StaticResource MetalTabItem}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Style="{StaticResource MetalScrollViewer}">
+                    <Border Style="{StaticResource MetalCard}" Margin="0,16,0,0">
+                        <StackPanel>
+                            <TextBlock Text="Server"
+                                       Style="{StaticResource SubheadingText}"
+                                       Margin="0,0,0,12"/>
+
+                            <Grid Margin="0,0,0,16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="160"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="Server URL"
+                                           Foreground="{StaticResource ChromeLightBrush}"
+                                           VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                <TextBox Grid.Row="0" Grid.Column="1" x:Name="ServerUrlBox"
+                                         Style="{StaticResource MetalTextBox}"
+                                         FontFamily="{StaticResource MonoFont}" FontSize="12"
+                                         Margin="0,0,0,8"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Admin API Key"
+                                           Foreground="{StaticResource ChromeLightBrush}"
+                                           VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="1" Grid.Column="1" x:Name="ApiKeyBox"
+                                         Style="{StaticResource MetalTextBox}"
+                                         FontFamily="{StaticResource MonoFont}" FontSize="12"/>
+                            </Grid>
+
+                            <StackPanel Orientation="Horizontal">
+                                <Button Content="Test connection"
+                                        Style="{StaticResource MetalButton}"
+                                        Padding="14,6" Click="Test_Click"/>
+                                <Button Content="Save"
+                                        Style="{StaticResource AccentButton}"
+                                        Padding="14,6" Margin="8,0,0,0"
+                                        Click="Save_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══════ Network ═══════ -->
+            <TabItem Header="Network" Style="{StaticResource MetalTabItem}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Style="{StaticResource MetalScrollViewer}">
+                    <Border Style="{StaticResource MetalCard}" Margin="0,16,0,0">
+                        <StackPanel>
+                            <TextBlock Text="DHCP Proxy" Style="{StaticResource SubheadingText}"
+                                       Margin="0,0,0,12"/>
+
+                            <Grid Margin="0,0,0,16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="160"/>
+                                    <ColumnDefinition Width="300"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="DHCP Proxy Port"
+                                           Foreground="{StaticResource ChromeLightBrush}"
+                                           VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                <TextBox Grid.Row="0" Grid.Column="1"
+                                         Style="{StaticResource MetalTextBox}"
+                                         Text="4011" Margin="0,0,0,8"/>
+
+                                <TextBlock Grid.Row="1" Grid.Column="0" Text="Server IP"
+                                           Foreground="{StaticResource ChromeLightBrush}"
+                                           VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                <TextBox Grid.Row="1" Grid.Column="1"
+                                         Style="{StaticResource MetalTextBox}"
+                                         Text="" Margin="0,0,0,8"/>
+
+                                <TextBlock Grid.Row="2" Grid.Column="0" Text="BIOS Boot File"
+                                           Foreground="{StaticResource ChromeLightBrush}"
+                                           VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                <TextBox Grid.Row="2" Grid.Column="1"
+                                         Style="{StaticResource MetalTextBox}"
+                                         Text="undionly.kpxe" Margin="0,0,0,8"/>
+
+                                <TextBlock Grid.Row="3" Grid.Column="0" Text="UEFI Boot File"
+                                           Foreground="{StaticResource ChromeLightBrush}"
+                                           VerticalAlignment="Center" Margin="0,0,0,8"/>
+                                <TextBox Grid.Row="3" Grid.Column="1"
+                                         Style="{StaticResource MetalTextBox}"
+                                         Text="snponly.efi" Margin="0,0,0,8"/>
+                            </Grid>
+
+                            <TextBlock Text="TFTP" Style="{StaticResource SubheadingText}"
+                                       Margin="0,8,0,12"/>
+
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="160"/>
+                                    <ColumnDefinition Width="300"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <TextBlock Grid.Row="0" Grid.Column="0" Text="TFTP Port"
+                                           Foreground="{StaticResource ChromeLightBrush}"
+                                           VerticalAlignment="Center"/>
+                                <TextBox Grid.Row="0" Grid.Column="1"
+                                         Style="{StaticResource MetalTextBox}"
+                                         Text="69"/>
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══════ iSCSI ═══════ -->
+            <TabItem Header="iSCSI" Style="{StaticResource MetalTabItem}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Style="{StaticResource MetalScrollViewer}">
+                    <Border Style="{StaticResource MetalCard}" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="300"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="iSCSI Port"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBox Grid.Row="0" Grid.Column="1"
+                                     Style="{StaticResource MetalTextBox}"
+                                     Text="3260" Margin="0,0,0,8"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="IQN Prefix"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBox Grid.Row="1" Grid.Column="1"
+                                     Style="{StaticResource MetalTextBox}"
+                                     Text="iqn.2024.com.nohddx" Margin="0,0,0,8"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Max Connections"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBox Grid.Row="2" Grid.Column="1"
+                                     Style="{StaticResource MetalTextBox}"
+                                     Text="2000" Margin="0,0,0,8"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="CHAP Authentication"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Center"/>
+                            <CheckBox Grid.Row="3" Grid.Column="1"
+                                      Style="{StaticResource MetalCheckBox}"
+                                      Content="Enable CHAP"
+                                      IsChecked="False"/>
+                        </Grid>
+                    </Border>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══════ Storage ═══════ -->
+            <TabItem Header="Storage" Style="{StaticResource MetalTabItem}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Style="{StaticResource MetalScrollViewer}">
+                    <Border Style="{StaticResource MetalCard}" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="400"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Base Path"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBox Grid.Row="0" Grid.Column="1"
+                                     Style="{StaticResource MetalTextBox}"
+                                     FontFamily="{StaticResource MonoFont}" FontSize="12"
+                                     Text="C:\NohddX\Storage\bases" Margin="0,0,0,8"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Overlay Path"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBox Grid.Row="1" Grid.Column="1"
+                                     Style="{StaticResource MetalTextBox}"
+                                     FontFamily="{StaticResource MonoFont}" FontSize="12"
+                                     Text="C:\NohddX\Storage\overlays" Margin="0,0,0,8"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Snapshot Path"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBox Grid.Row="2" Grid.Column="1"
+                                     Style="{StaticResource MetalTextBox}"
+                                     FontFamily="{StaticResource MonoFont}" FontSize="12"
+                                     Text="C:\NohddX\Storage\snapshots" Margin="0,0,0,8"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Storage Base Path"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBox Grid.Row="3" Grid.Column="1"
+                                     Style="{StaticResource MetalTextBox}"
+                                     FontFamily="{StaticResource MonoFont}" FontSize="12"
+                                     Text="C:\NohddX\Storage" Margin="0,0,0,8"/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="COW Block Size"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Center"/>
+                            <TextBox Grid.Row="4" Grid.Column="1"
+                                     Style="{StaticResource MetalTextBox}"
+                                     Text="4096"/>
+                        </Grid>
+                    </Border>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══════ Cluster ═══════ -->
+            <TabItem Header="Cluster" Style="{StaticResource MetalTabItem}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Style="{StaticResource MetalScrollViewer}">
+                    <Border Style="{StaticResource MetalCard}" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="300"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Enable Clustering"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,0,8"/>
+                            <CheckBox Grid.Row="0" Grid.Column="1"
+                                      Style="{StaticResource MetalCheckBox}"
+                                      Content="Enable"
+                                      IsChecked="False" Margin="0,0,0,8"/>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="Node Name"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBox Grid.Row="1" Grid.Column="1"
+                                     Style="{StaticResource MetalTextBox}"
+                                     Text="" Margin="0,0,0,8"/>
+
+                            <TextBlock Grid.Row="2" Grid.Column="0" Text="Cluster Port"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBox Grid.Row="2" Grid.Column="1"
+                                     Style="{StaticResource MetalTextBox}"
+                                     Text="5000" Margin="0,0,0,8"/>
+
+                            <TextBlock Grid.Row="3" Grid.Column="0" Text="Heartbeat (ms)"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,0,8"/>
+                            <TextBox Grid.Row="3" Grid.Column="1"
+                                     Style="{StaticResource MetalTextBox}"
+                                     Text="2000" Margin="0,0,0,8"/>
+
+                            <TextBlock Grid.Row="4" Grid.Column="0" Text="Seed Nodes"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Top" Margin="0,8,0,0"/>
+                            <TextBox Grid.Row="4" Grid.Column="1"
+                                     Style="{StaticResource MetalTextBox}"
+                                     AcceptsReturn="True"
+                                     Height="80"
+                                     VerticalScrollBarVisibility="Auto"
+                                     Text=""
+                                     FontFamily="{StaticResource MonoFont}"
+                                     FontSize="12"/>
+                        </Grid>
+                    </Border>
+                </ScrollViewer>
+            </TabItem>
+
+            <!-- ═══════ General ═══════ -->
+            <TabItem Header="General" Style="{StaticResource MetalTabItem}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"
+                              Style="{StaticResource MetalScrollViewer}">
+                    <Border Style="{StaticResource MetalCard}" Margin="0,16,0,0">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="300"/>
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <TextBlock Grid.Row="0" Grid.Column="0" Text="Log Level"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Center" Margin="0,0,0,8"/>
+                            <ComboBox Grid.Row="0" Grid.Column="1"
+                                      Style="{StaticResource MetalComboBox}"
+                                      Margin="0,0,0,8">
+                                <ComboBoxItem Content="Verbose" Style="{StaticResource MetalComboBoxItem}"/>
+                                <ComboBoxItem Content="Debug" Style="{StaticResource MetalComboBoxItem}"/>
+                                <ComboBoxItem Content="Information" IsSelected="True"
+                                              Style="{StaticResource MetalComboBoxItem}"/>
+                                <ComboBoxItem Content="Warning" Style="{StaticResource MetalComboBoxItem}"/>
+                                <ComboBoxItem Content="Error" Style="{StaticResource MetalComboBoxItem}"/>
+                            </ComboBox>
+
+                            <TextBlock Grid.Row="1" Grid.Column="0" Text="API Port"
+                                       Foreground="{StaticResource ChromeLightBrush}"
+                                       VerticalAlignment="Center"/>
+                            <TextBox Grid.Row="1" Grid.Column="1"
+                                     Style="{StaticResource MetalTextBox}"
+                                     Text="8080"/>
+                        </Grid>
+                    </Border>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</UserControl>

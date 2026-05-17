@@ -1,0 +1,313 @@
+<Window x:Class="NohddX.Ui.Views.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:NohddX.Ui.ViewModels"
+        Title="NoHddX"
+        Width="1280" Height="800"
+        MinWidth="900" MinHeight="600"
+        WindowStartupLocation="CenterScreen"
+        Background="{StaticResource MetalDarkestBrush}"
+        Foreground="{StaticResource ChromeBrightBrush}"
+        FontFamily="{StaticResource UIFont}"
+        WindowStyle="None"
+        AllowsTransparency="False"
+        ResizeMode="CanResizeWithGrip">
+
+    <!-- Custom Window Chrome -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="40"
+                      GlassFrameThickness="0"
+                      ResizeBorderThickness="6"
+                      CornerRadius="0"
+                      UseAeroCaptionButtons="False"/>
+    </WindowChrome.WindowChrome>
+
+    <Window.DataContext>
+        <vm:MainViewModel/>
+    </Window.DataContext>
+
+    <!-- Root layout -->
+    <Border BorderBrush="{StaticResource MetalBorderBrush}" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="40"/>  <!-- Title bar -->
+                <RowDefinition Height="*"/>   <!-- Content -->
+                <RowDefinition Height="28"/>  <!-- Status bar -->
+            </Grid.RowDefinitions>
+
+            <!-- ═══════════════════════════════════════════
+                 TITLE BAR
+                 ═══════════════════════════════════════════ -->
+            <Border Grid.Row="0" Background="{StaticResource MetalHeaderBrush}"
+                    BorderBrush="{StaticResource MetalBorderBrush}"
+                    BorderThickness="0,0,0,1">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>  <!-- Logo / Title -->
+                        <ColumnDefinition Width="*"/>     <!-- Server status (centered) -->
+                        <ColumnDefinition Width="Auto"/>  <!-- Chrome buttons -->
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Logo & App Title -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                Margin="14,0,0,0" VerticalAlignment="Center">
+                        <!-- HDD icon (Path data) -->
+                        <Viewbox Width="20" Height="20" Margin="0,0,10,0">
+                            <Canvas Width="24" Height="24">
+                                <Path Fill="{StaticResource AccentBlueBrush}"
+                                      Data="M4,4 L20,4 C21.1,4 22,4.9 22,6 L22,18 C22,19.1 21.1,20 20,20 L4,20 C2.9,20 2,19.1 2,18 L2,6 C2,4.9 2.9,4 4,4 Z M6,8 L18,8 L18,16 L6,16 Z M16,17 A1,1 0 1,0 16,19 A1,1 0 1,0 16,17 Z"/>
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock Text="NoHddX" FontSize="15" FontWeight="Bold"
+                                   Foreground="{StaticResource ChromeWhiteBrush}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Server status (center) -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal"
+                                HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <TextBlock Text="Server:" Foreground="{StaticResource ChromeLightBrush}"
+                                   FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                        <Ellipse x:Name="ServerLed" Width="8" Height="8"
+                                 VerticalAlignment="Center" Margin="0,0,6,0">
+                            <Ellipse.Style>
+                                <Style TargetType="Ellipse" BasedOn="{StaticResource StatusLedBooting}"/>
+                            </Ellipse.Style>
+                        </Ellipse>
+                        <TextBlock x:Name="StatusText"
+                                   Text="{Binding ServerStatus}"
+                                   Foreground="{StaticResource ChromeBrightBrush}"
+                                   FontSize="12" VerticalAlignment="Center"
+                                   Margin="0,0,16,0"/>
+                        <TextBlock Text="{Binding ServerAddress}"
+                                   Foreground="{StaticResource MetalLighterBrush}"
+                                   FontSize="11" FontFamily="{StaticResource MonoFont}"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Window chrome buttons -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal">
+                        <Button Style="{StaticResource ChromeButton}"
+                                Click="MinimizeClick">
+                            <Path Data="M 0,5 L 10,5" Stroke="{StaticResource ChromeLightBrush}"
+                                  StrokeThickness="1" VerticalAlignment="Center"
+                                  HorizontalAlignment="Center"/>
+                        </Button>
+                        <Button x:Name="MaximizeBtn"
+                                Style="{StaticResource ChromeButton}"
+                                Click="MaximizeClick">
+                            <Path Data="M 0,0 L 9,0 L 9,9 L 0,9 Z"
+                                  Stroke="{StaticResource ChromeLightBrush}"
+                                  StrokeThickness="1" Fill="Transparent"
+                                  VerticalAlignment="Center"
+                                  HorizontalAlignment="Center"/>
+                        </Button>
+                        <Button Style="{StaticResource CloseButton}"
+                                Click="CloseClick">
+                            <Path Data="M 0,0 L 9,9 M 9,0 L 0,9"
+                                  Stroke="{StaticResource ChromeLightBrush}"
+                                  StrokeThickness="1"
+                                  VerticalAlignment="Center"
+                                  HorizontalAlignment="Center"/>
+                        </Button>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- ═══════════════════════════════════════════
+                 MAIN CONTENT: Sidebar + Content Area
+                 ═══════════════════════════════════════════ -->
+            <Grid Grid.Row="1">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>  <!-- Sidebar -->
+                    <ColumnDefinition Width="*"/>    <!-- Content -->
+                </Grid.ColumnDefinitions>
+
+                <!-- ── Sidebar ── -->
+                <Border Grid.Column="0" Background="{StaticResource MetalSidebarBrush}"
+                        BorderBrush="{StaticResource MetalBorderBrush}"
+                        BorderThickness="0,0,1,0">
+                    <DockPanel>
+                        <!-- App version at bottom -->
+                        <TextBlock DockPanel.Dock="Bottom"
+                                   Text="v1.0.0-alpha"
+                                   Style="{StaticResource CaptionText}"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,0,0,10" Opacity="0.5"/>
+
+                        <!-- Navigation items -->
+                        <ListBox x:Name="NavList"
+                                 Style="{StaticResource NavListBox}"
+                                 SelectedIndex="0"
+                                 Margin="0,8,0,0"
+                                 SelectionChanged="NavList_SelectionChanged">
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem"
+                                       BasedOn="{StaticResource NavListBoxItem}"/>
+                            </ListBox.ItemContainerStyle>
+
+                            <!-- Dashboard -->
+                            <ListBoxItem Tag="Dashboard">
+                                <StackPanel Orientation="Horizontal">
+                                    <Viewbox Width="18" Height="18" Margin="0,0,12,0">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                                  Data="M3,13h8V3H3V13z M3,21h8v-6H3V21z M13,21h8V11h-8V21z M13,3v6h8V3H13z"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Text="Dashboard" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </ListBoxItem>
+
+                            <!-- Clients -->
+                            <ListBoxItem Tag="Clients">
+                                <StackPanel Orientation="Horizontal">
+                                    <Viewbox Width="18" Height="18" Margin="0,0,12,0">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                                  Data="M20,18c1.1,0 2,-0.9 2,-2V6c0,-1.1 -0.9,-2 -2,-2H4C2.9,4 2,4.9 2,6v10c0,1.1 0.9,2 2,2H0v2h24v-2H20z M4,6h16v10H4V6z"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Text="Clients" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </ListBoxItem>
+
+                            <!-- Images -->
+                            <ListBoxItem Tag="Images">
+                                <StackPanel Orientation="Horizontal">
+                                    <Viewbox Width="18" Height="18" Margin="0,0,12,0">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                                  Data="M2,20h20V4H2V20z M4,6h16v12H4V6z M6,18l3,-3.86 2.14,2.58 3,-3.86L18,18H6z"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Text="Images" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </ListBoxItem>
+
+                            <!-- Cluster -->
+                            <ListBoxItem Tag="Cluster">
+                                <StackPanel Orientation="Horizontal">
+                                    <Viewbox Width="18" Height="18" Margin="0,0,12,0">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                                  Data="M12,2 L4,7v10l8,5l8,-5V7L12,2z M12,4.3L18,8v8l-6,3.7L6,16V8L12,4.3z M12,8a4,4 0 1,0 0,8a4,4 0 1,0 0,-8z M12,10a2,2 0 1,1 0,4a2,2 0 1,1 0,-4z"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Text="Cluster" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </ListBoxItem>
+
+                            <!-- Storage -->
+                            <ListBoxItem Tag="Storage">
+                                <StackPanel Orientation="Horizontal">
+                                    <Viewbox Width="18" Height="18" Margin="0,0,12,0">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                                  Data="M2,20h20v-4H2V20z M4,17h2v2H4V17z M2,4v4h20V4H2z M6,7H4V5h2V7z M2,14h20v-4H2V14z M4,11h2v2H4V11z"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Text="Storage" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </ListBoxItem>
+
+                            <!-- Settings -->
+                            <ListBoxItem Tag="Settings">
+                                <StackPanel Orientation="Horizontal">
+                                    <Viewbox Width="18" Height="18" Margin="0,0,12,0">
+                                        <Canvas Width="24" Height="24">
+                                            <Path Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                                  Data="M19.14,12.94c0.04,-0.3 0.06,-0.61 0.06,-0.94c0,-0.32 -0.02,-0.64 -0.07,-0.94l2.03,-1.58c0.18,-0.14 0.23,-0.41 0.12,-0.61l-1.92,-3.32c-0.12,-0.22 -0.37,-0.29 -0.59,-0.22l-2.39,0.96c-0.5,-0.38 -1.03,-0.7 -1.62,-0.94L14.4,2.81c-0.04,-0.24 -0.24,-0.41 -0.48,-0.41h-3.84c-0.24,0 -0.43,0.17 -0.47,0.41L9.25,5.35C8.66,5.59 8.12,5.92 7.63,6.29L5.24,5.33c-0.22,-0.08 -0.47,0 -0.59,0.22L2.74,8.87C2.62,9.08 2.66,9.34 2.86,9.48l2.03,1.58C4.84,11.36 4.8,11.69 4.8,12s0.02,0.64 0.07,0.94l-2.03,1.58c-0.18,0.14 -0.23,0.41 -0.12,0.61l1.92,3.32c0.12,0.22 0.37,0.29 0.59,0.22l2.39,-0.96c0.5,0.38 1.03,0.7 1.62,0.94l0.36,2.54c0.05,0.24 0.24,0.41 0.48,0.41h3.84c0.24,0 0.44,-0.17 0.47,-0.41l0.36,-2.54c0.59,-0.24 1.13,-0.56 1.62,-0.94l2.39,0.96c0.22,0.08 0.47,0 0.59,-0.22l1.92,-3.32c0.12,-0.22 0.07,-0.47 -0.12,-0.61L19.14,12.94z M12,15.6c-1.98,0 -3.6,-1.62 -3.6,-3.6s1.62,-3.6 3.6,-3.6s3.6,1.62 3.6,3.6S13.98,15.6 12,15.6z"/>
+                                        </Canvas>
+                                    </Viewbox>
+                                    <TextBlock Text="Settings" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </ListBoxItem>
+                        </ListBox>
+                    </DockPanel>
+                </Border>
+
+                <!-- ── Content Area ── -->
+                <Border Grid.Column="1" Background="{StaticResource BrushedMetalBrush}">
+                    <ContentControl x:Name="ContentArea" Margin="24">
+                        <!-- Default: Dashboard placeholder -->
+                        <ContentControl.ContentTemplate>
+                            <DataTemplate>
+                                <ContentPresenter Content="{Binding}"/>
+                            </DataTemplate>
+                        </ContentControl.ContentTemplate>
+                    </ContentControl>
+                </Border>
+            </Grid>
+
+            <!-- ═══════════════════════════════════════════
+                 STATUS BAR
+                 ═══════════════════════════════════════════ -->
+            <Border Grid.Row="2" Background="{StaticResource StatusBarBrush}"
+                    BorderBrush="{StaticResource MetalBorderBrush}"
+                    BorderThickness="0,1,0,0">
+                <Grid Margin="12,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+
+                    <!-- Connected clients -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal"
+                                VerticalAlignment="Center" Margin="0,0,20,0">
+                        <Viewbox Width="12" Height="12" Margin="0,0,5,0">
+                            <Canvas Width="24" Height="24">
+                                <Path Fill="{StaticResource ChromeLightBrush}"
+                                      Data="M20,18c1.1,0 2,-0.9 2,-2V6c0,-1.1 -0.9,-2 -2,-2H4C2.9,4 2,4.9 2,6v10c0,1.1 0.9,2 2,2H0v2h24v-2H20z"/>
+                            </Canvas>
+                        </Viewbox>
+                        <TextBlock FontSize="11" Foreground="{StaticResource ChromeLightBrush}"
+                                   VerticalAlignment="Center">
+                            <Run Text="Clients: "/>
+                            <Run Text="{Binding ConnectedClients, Mode=OneWay}"/>
+                        </TextBlock>
+                    </StackPanel>
+
+                    <!-- Separator -->
+                    <Border Grid.Column="1" Width="1" Height="14"
+                            Background="{StaticResource MetalBorderBrush}"
+                            Margin="0,0,20,0"/>
+
+                    <!-- Uptime -->
+                    <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                VerticalAlignment="Center" Margin="0,0,20,0">
+                        <TextBlock FontSize="11" Foreground="{StaticResource ChromeLightBrush}"
+                                   VerticalAlignment="Center">
+                            <Run Text="Uptime: "/>
+                            <Run Text="{Binding Uptime, Mode=OneWay}"
+                                 FontFamily="{StaticResource MonoFont}"/>
+                        </TextBlock>
+                    </StackPanel>
+
+                    <!-- Separator -->
+                    <Border Grid.Column="3" Width="1" Height="14"
+                            Background="{StaticResource MetalBorderBrush}"
+                            HorizontalAlignment="Left"/>
+
+                    <!-- Cluster status (right-aligned) -->
+                    <StackPanel Grid.Column="4" Orientation="Horizontal"
+                                VerticalAlignment="Center">
+                        <Ellipse Width="7" Height="7" Margin="0,0,5,0">
+                            <Ellipse.Style>
+                                <Style TargetType="Ellipse" BasedOn="{StaticResource StatusLedOffline}"/>
+                            </Ellipse.Style>
+                        </Ellipse>
+                        <TextBlock FontSize="11" Foreground="{StaticResource ChromeLightBrush}"
+                                   VerticalAlignment="Center">
+                            <Run Text="Cluster: "/>
+                            <Run Text="{Binding ClusterStatus, Mode=OneWay}"/>
+                        </TextBlock>
+                    </StackPanel>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

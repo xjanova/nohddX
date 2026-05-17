@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>NohddX.IsoBuilder</RootNamespace>
+    <AssemblyName>nohddx-iso-builder</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="DiscUtils.Fat" />
+    <PackageReference Include="DiscUtils.Streams" />
+  </ItemGroup>
+</Project>

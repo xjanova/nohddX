@@ -1,0 +1,153 @@
+<UserControl x:Class="NohddX.Ui.Views.ClientsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <DockPanel>
+        <!-- ── Title ── -->
+        <TextBlock DockPanel.Dock="Top" Text="CLIENTS"
+                   Style="{StaticResource HeadingText}"
+                   Margin="0,0,0,16"/>
+
+        <!-- ── Toolbar ── -->
+        <Border DockPanel.Dock="Top" Style="{StaticResource MetalPanel}"
+                Padding="12,8" Margin="0,0,0,12">
+            <WrapPanel>
+                <!-- Search -->
+                <TextBox x:Name="SearchBox" Style="{StaticResource MetalTextBox}"
+                         Width="220" Padding="8,6"
+                         Tag="Search MAC, hostname, IP..."
+                         TextChanged="SearchBox_TextChanged"/>
+
+                <!-- Filter -->
+                <ComboBox x:Name="FilterCombo" Style="{StaticResource MetalComboBox}"
+                          Width="140" Margin="8,0,0,0"
+                          SelectionChanged="FilterCombo_SelectionChanged">
+                    <ComboBoxItem Content="All" IsSelected="True"
+                                  Style="{StaticResource MetalComboBoxItem}"/>
+                    <ComboBoxItem Content="Online"
+                                  Style="{StaticResource MetalComboBoxItem}"/>
+                    <ComboBoxItem Content="Offline"
+                                  Style="{StaticResource MetalComboBoxItem}"/>
+                    <ComboBoxItem Content="Booting"
+                                  Style="{StaticResource MetalComboBoxItem}"/>
+                </ComboBox>
+
+                <!-- Actions -->
+                <Button Content="Add Client" Style="{StaticResource AccentButton}"
+                        Padding="12,6" Margin="16,0,0,0"
+                        Click="AddClient_Click"/>
+                <Button Content="Assign Image" Style="{StaticResource MetalButton}"
+                        Padding="12,6" Margin="8,0,0,0"
+                        Click="AssignImage_Click"/>
+                <Button Content="Refresh" Style="{StaticResource MetalButton}"
+                        Padding="12,6" Margin="8,0,0,0"
+                        Click="Refresh_Click"/>
+            </WrapPanel>
+        </Border>
+
+        <!-- ── Status bar ── -->
+        <Border DockPanel.Dock="Bottom" Padding="12,6" Margin="0,8,0,0">
+            <TextBlock x:Name="StatusText"
+                       Style="{StaticResource CaptionText}"
+                       Foreground="{StaticResource MetalLighterBrush}"/>
+        </Border>
+
+        <!-- ── DataGrid ── -->
+        <Border Style="{StaticResource MetalCard}" Padding="0">
+            <DataGrid x:Name="ClientsGrid"
+                      Style="{StaticResource MetalDataGrid}"
+                      ColumnHeaderStyle="{StaticResource MetalColumnHeader}"
+                      RowStyle="{StaticResource MetalDataGridRow}"
+                      CellStyle="{StaticResource MetalDataGridCell}"
+                      VirtualizingPanel.IsVirtualizing="True"
+                      VirtualizingPanel.VirtualizationMode="Recycling"
+                      EnableRowVirtualization="True"
+                      BorderThickness="0">
+                <DataGrid.ContextMenu>
+                    <ContextMenu Style="{StaticResource MetalContextMenu}">
+                        <MenuItem Header="Wake" Style="{StaticResource MetalMenuItem}"
+                                  Click="Wake_Click"/>
+                        <MenuItem Header="Reset overlay" Style="{StaticResource MetalMenuItem}"
+                                  Click="Reset_Click"/>
+                        <Separator Style="{StaticResource MetalMenuSeparator}"/>
+                        <MenuItem Header="Assign Image" Style="{StaticResource MetalMenuItem}"
+                                  Click="AssignImage_Click"/>
+                        <Separator Style="{StaticResource MetalMenuSeparator}"/>
+                        <MenuItem Header="Remove" Style="{StaticResource MetalMenuItem}"
+                                  Foreground="{StaticResource AccentRedBrush}"
+                                  Click="Remove_Click"/>
+                    </ContextMenu>
+                </DataGrid.ContextMenu>
+
+                <DataGrid.Columns>
+                    <!-- Status LED -->
+                    <DataGridTemplateColumn Header="" Width="36" CanUserResize="False">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Ellipse Width="10" Height="10"
+                                         HorizontalAlignment="Center">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse" BasedOn="{StaticResource StatusLed}">
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding Status}" Value="Online">
+                                                    <Setter Property="Fill" Value="{StaticResource AccentGreenBrush}"/>
+                                                    <Setter Property="Effect">
+                                                        <Setter.Value>
+                                                            <DropShadowEffect BlurRadius="6" ShadowDepth="0"
+                                                                              Color="#FF3FB950" Opacity="0.6"/>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Status}" Value="Offline">
+                                                    <Setter Property="Fill">
+                                                        <Setter.Value>
+                                                            <SolidColorBrush Color="#FF484F58"/>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding Status}" Value="Booting">
+                                                    <Setter Property="Fill" Value="{StaticResource AccentAmberBrush}"/>
+                                                    <Setter Property="Effect">
+                                                        <Setter.Value>
+                                                            <DropShadowEffect BlurRadius="6" ShadowDepth="0"
+                                                                              Color="#FFD29922" Opacity="0.6"/>
+                                                        </Setter.Value>
+                                                    </Setter>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+
+                    <DataGridTextColumn Header="MAC Address" Binding="{Binding MacAddress}" Width="160">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <DataGridTextColumn Header="Hostname" Binding="{Binding Hostname}" Width="140"/>
+                    <DataGridTextColumn Header="IP Address" Binding="{Binding IpAddress}" Width="130">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontFamily" Value="{StaticResource MonoFont}"/>
+                                <Setter Property="FontSize" Value="12"/>
+                                <Setter Property="VerticalAlignment" Value="Center"/>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+
+                    <DataGridTextColumn Header="Group" Binding="{Binding Group}" Width="100"/>
+                    <DataGridTextColumn Header="Image" Binding="{Binding ImageName}" Width="140"/>
+                    <DataGridTextColumn Header="Last Seen" Binding="{Binding LastSeen}" Width="*"/>
+                </DataGrid.Columns>
+            </DataGrid>
+        </Border>
+    </DockPanel>
+</UserControl>
