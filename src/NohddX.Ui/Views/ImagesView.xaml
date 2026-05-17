@@ -12,8 +12,10 @@
         <Border DockPanel.Dock="Top" Style="{StaticResource MetalPanel}"
                 Padding="12,8" Margin="0,0,0,16">
             <StackPanel Orientation="Horizontal">
+                <Button Content="Upload Image" Style="{StaticResource AccentButton}"
+                        Padding="12,6" Click="Upload_Click"/>
                 <Button Content="Refresh" Style="{StaticResource MetalButton}"
-                        Padding="12,6" Click="Refresh_Click"/>
+                        Padding="12,6" Margin="8,0,0,0" Click="Refresh_Click"/>
             </StackPanel>
         </Border>
 

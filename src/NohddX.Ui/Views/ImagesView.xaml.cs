@@ -30,6 +30,15 @@ public partial class ImagesView : UserControl
 
     private async void Refresh_Click(object sender, RoutedEventArgs e) => await RefreshAsync();
 
+    private async void Upload_Click(object sender, RoutedEventArgs e)
+    {
+        var dlg = new UploadImageDialog { Owner = Window.GetWindow(this) };
+        if (dlg.ShowDialog() == true)
+        {
+            await RefreshAsync();
+        }
+    }
+
     // ── Mapping ───────────────────────────────────────
 
     // Same SVG paths the original mock used so the cards still look like the

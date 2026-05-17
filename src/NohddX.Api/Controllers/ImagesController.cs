@@ -1,8 +1,11 @@
+using System.Security.Cryptography;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.Extensions.Options;
 using NohddX.Api.Auth;
 using NohddX.Api.DTOs;
+using NohddX.Core.Configuration;
 using NohddX.Core.Interfaces;
 using NohddX.Core.Models;
 
@@ -16,13 +19,22 @@ public class ImagesController : ControllerBase
 {
     private readonly IImageRepository _imageRepo;
     private readonly ICowStorageEngine _cowStorage;
+    private readonly AuditLogger _audit;
+    private readonly NohddxOptions _options;
+    private readonly ILogger<ImagesController> _logger;
 
     public ImagesController(
         IImageRepository imageRepo,
-        ICowStorageEngine cowStorage)
+        ICowStorageEngine cowStorage,
+        AuditLogger audit,
+        IOptions<NohddxOptions> options,
+        ILogger<ImagesController> logger)
     {
         _imageRepo = imageRepo;
         _cowStorage = cowStorage;
+        _audit = audit;
+        _options = options.Value;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -73,6 +85,8 @@ public class ImagesController : ControllerBase
         };
 
         var created = await _imageRepo.AddAsync(image, ct);
+        await _audit.RecordAsync("image.create", true, "image", created.Id.ToString(),
+            $"name={created.Name} path={created.FilePath} size={created.SizeBytes}", ct);
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, MapToResponse(created));
     }
 
@@ -105,6 +119,8 @@ public class ImagesController : ControllerBase
 
         image.UpdatedAt = DateTime.UtcNow;
         await _imageRepo.UpdateAsync(image, ct);
+        await _audit.RecordAsync("image.update", true, "image", image.Id.ToString(),
+            $"name={image.Name} path={image.FilePath}", ct);
 
         return Ok(MapToResponse(image));
     }
@@ -118,8 +134,154 @@ public class ImagesController : ControllerBase
         if (image is null)
             return NotFound();
 
+        // Remove the DB row first; if the disk delete fails afterward the
+        // operator only loses some space, not data integrity.
         await _imageRepo.DeleteAsync(id, ct);
+
+        // Only unlink files that live under our configured storage roots —
+        // refuses to touch anything an operator pasted in from outside the
+        // sandbox. Best-effort: log + audit even on failure so the operator
+        // sees the orphaned file.
+        bool fileDeleted = false;
+        string? deleteError = null;
+        if (!string.IsNullOrWhiteSpace(image.FilePath) && IsUnderStorageRoot(image.FilePath))
+        {
+            try
+            {
+                if (System.IO.File.Exists(image.FilePath))
+                {
+                    System.IO.File.Delete(image.FilePath);
+                    fileDeleted = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                deleteError = ex.Message;
+                _logger.LogWarning(ex, "Failed to delete image file {Path}", image.FilePath);
+            }
+        }
+
+        await _audit.RecordAsync("image.delete", true, "image", id.ToString(),
+            $"name={image.Name} path={image.FilePath} fileDeleted={fileDeleted}" +
+            (deleteError is null ? "" : $" error={deleteError}"), ct);
         return NoContent();
+    }
+
+    /// <summary>
+    /// Streaming upload of a raw or VHD image. Operator picks a local file in
+    /// the WPF console and POSTs its bytes; this writes them to a generated
+    /// path under <see cref="NohddxOptions.BaseImagesPath"/> while computing
+    /// a SHA-256 checksum, then inserts a <see cref="BootImage"/> row. The
+    /// upload path is what lets the operator add a new boot target without
+    /// shell access to the server.
+    /// </summary>
+    [HttpPost("upload")]
+    [DisableRequestSizeLimit]
+    [RequestFormLimits(MultipartBodyLengthLimit = long.MaxValue, ValueLengthLimit = int.MaxValue)]
+    [ProducesResponseType(typeof(ImageResponse), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> Upload(
+        [FromQuery] string name,
+        [FromQuery] OsType osType = OsType.Custom,
+        [FromQuery] string version = "1.0",
+        [FromQuery] bool isDefault = false,
+        [FromQuery] string? extension = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+            return BadRequest("Image name is required.");
+
+        Directory.CreateDirectory(_options.BaseImagesPath);
+
+        // Sanitise extension — never let the caller drop a path separator
+        // into our storage root. Default to .vhd which is what we serve.
+        var ext = string.IsNullOrWhiteSpace(extension) ? "vhd" : extension.Trim('.', '/', '\\', ' ');
+        if (ext.Length > 8 || ext.Any(c => !char.IsLetterOrDigit(c)))
+            ext = "vhd";
+
+        var safeName = string.Concat(name.Where(c => char.IsLetterOrDigit(c) || c is '-' or '_' or '.'));
+        if (string.IsNullOrEmpty(safeName)) safeName = "image";
+        var fileName = $"{safeName}-{DateTime.UtcNow:yyyyMMddHHmmss}-{Guid.NewGuid():N}.{ext}";
+        var filePath = Path.Combine(_options.BaseImagesPath, fileName);
+
+        long bytesWritten;
+        string checksumHex;
+        try
+        {
+            await using var dest = new FileStream(
+                filePath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+                bufferSize: 1 << 20, useAsync: true);
+            using var sha = SHA256.Create();
+
+            var buffer = new byte[1 << 20]; // 1 MiB
+            int read;
+            long total = 0;
+            while ((read = await Request.Body.ReadAsync(buffer.AsMemory(), ct)) > 0)
+            {
+                sha.TransformBlock(buffer, 0, read, null, 0);
+                await dest.WriteAsync(buffer.AsMemory(0, read), ct);
+                total += read;
+            }
+            sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+            bytesWritten = total;
+            checksumHex = Convert.ToHexString(sha.Hash!).ToLowerInvariant();
+        }
+        catch
+        {
+            // Clean up the partial file so the storage root doesn't fill up
+            // with zombie uploads after disconnects.
+            try { if (System.IO.File.Exists(filePath)) System.IO.File.Delete(filePath); } catch { }
+            throw;
+        }
+
+        if (bytesWritten == 0)
+        {
+            try { System.IO.File.Delete(filePath); } catch { }
+            return BadRequest("Upload body was empty.");
+        }
+
+        var image = new BootImage
+        {
+            Id = Guid.NewGuid(),
+            Name = name,
+            OsType = osType,
+            Version = version,
+            FilePath = filePath,
+            SizeBytes = bytesWritten,
+            Checksum = "sha256:" + checksumHex,
+            Status = ImageStatus.Active,
+            IsDefault = isDefault,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow
+        };
+        var created = await _imageRepo.AddAsync(image, ct);
+
+        await _audit.RecordAsync("image.upload", true, "image", created.Id.ToString(),
+            $"name={name} bytes={bytesWritten} sha256={checksumHex[..16]}…", ct);
+
+        return CreatedAtAction(nameof(GetById), new { id = created.Id }, MapToResponse(created));
+    }
+
+    /// <summary>
+    /// Refuses paths that aren't inside the configured storage roots — keeps
+    /// DELETE from removing arbitrary files an admin happened to register.
+    /// </summary>
+    private bool IsUnderStorageRoot(string path)
+    {
+        try
+        {
+            var resolved = Path.GetFullPath(path);
+            string[] roots =
+            {
+                Path.GetFullPath(_options.BaseImagesPath),
+                Path.GetFullPath(_options.StorageBasePath),
+            };
+            return roots.Any(r => resolved.StartsWith(r, StringComparison.OrdinalIgnoreCase));
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     [HttpPost("{id:guid}/snapshot")]
@@ -151,6 +313,8 @@ public class ImagesController : ControllerBase
 
         image.Snapshots.Add(snapshot);
         await _imageRepo.UpdateAsync(image, ct);
+        await _audit.RecordAsync("image.snapshot", true, "image", id.ToString(),
+            $"snapshotId={snapshot.Id} name={snapshot.Name}", ct);
 
         var response = new SnapshotResponse(
             Id: snapshot.Id,

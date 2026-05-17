@@ -1,3 +1,4 @@
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -106,6 +107,99 @@ public sealed class NohddxApiClient : IDisposable
     {
         var result = await _http.GetFromJsonAsync<List<ImageResponse>>("api/images?take=1000", JsonOpts, ct);
         return result ?? new List<ImageResponse>();
+    }
+
+    public async Task<ImageResponse?> UploadImageAsync(
+        string localPath,
+        string name,
+        NohddX.Core.Models.OsType osType,
+        string version,
+        bool isDefault,
+        IProgress<long>? progress = null,
+        CancellationToken ct = default)
+    {
+        // Image uploads can be many GBs; the shared HttpClient's 15s timeout
+        // would trip a long copy. Spin up a one-off client with no timeout —
+        // the caller's CancellationToken is the only stop signal.
+        using var bigClient = new HttpClient
+        {
+            BaseAddress = _http.BaseAddress,
+            Timeout = Timeout.InfiniteTimeSpan,
+        };
+        foreach (var header in _http.DefaultRequestHeaders)
+            bigClient.DefaultRequestHeaders.TryAddWithoutValidation(header.Key, header.Value);
+
+        await using var fs = new FileStream(localPath, FileMode.Open, FileAccess.Read,
+            FileShare.Read, bufferSize: 1 << 20, useAsync: true);
+
+        // Wrap the file stream so we can report bytes-read progress to the
+        // UI without depending on HttpClient internals.
+        using var reporting = new ProgressStream(fs, progress);
+
+        var ext = Path.GetExtension(localPath).TrimStart('.');
+        var qs = $"?name={Uri.EscapeDataString(name)}&osType={osType}" +
+                 $"&version={Uri.EscapeDataString(version)}" +
+                 $"&isDefault={(isDefault ? "true" : "false")}" +
+                 (string.IsNullOrEmpty(ext) ? "" : $"&extension={Uri.EscapeDataString(ext)}");
+
+        using var content = new StreamContent(reporting);
+        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        using var req = new HttpRequestMessage(HttpMethod.Post, "api/images/upload" + qs)
+        {
+            Content = content
+        };
+
+        using var resp = await bigClient.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
+        resp.EnsureSuccessStatusCode();
+        return await resp.Content.ReadFromJsonAsync<ImageResponse>(JsonOpts, ct);
+    }
+
+    /// <summary>
+    /// Read-through wrapper that pings an <see cref="IProgress{T}"/> with
+    /// the running byte count so the operator sees progress instead of a
+    /// frozen dialog during a multi-gigabyte upload.
+    /// </summary>
+    private sealed class ProgressStream : Stream
+    {
+        private readonly Stream _inner;
+        private readonly IProgress<long>? _progress;
+        private long _read;
+
+        public ProgressStream(Stream inner, IProgress<long>? progress)
+        {
+            _inner = inner;
+            _progress = progress;
+        }
+
+        public override bool CanRead => _inner.CanRead;
+        public override bool CanSeek => _inner.CanSeek;
+        public override bool CanWrite => false;
+        public override long Length => _inner.Length;
+        public override long Position { get => _inner.Position; set => _inner.Position = value; }
+        public override void Flush() => _inner.Flush();
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+        public override void SetLength(long value) => _inner.SetLength(value);
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var n = _inner.Read(buffer, offset, count);
+            if (n > 0) { _read += n; _progress?.Report(_read); }
+            return n;
+        }
+
+        public override async ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken ct = default)
+        {
+            var n = await _inner.ReadAsync(buffer, ct);
+            if (n > 0) { _read += n; _progress?.Report(_read); }
+            return n;
+        }
+    }
+
+    public async Task DeleteImageAsync(Guid id, CancellationToken ct = default)
+    {
+        using var resp = await _http.DeleteAsync($"api/images/{id}", ct);
+        resp.EnsureSuccessStatusCode();
     }
 
     // ─── Cluster ───────────────────────────────────────────────────────────
