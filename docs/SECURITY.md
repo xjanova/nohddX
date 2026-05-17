@@ -69,8 +69,35 @@ The agent endpoints (status, install) are limited to 300/min per agent.
 ## Audit log
 
 Every admin and security-sensitive action is appended to the `AuditLog`
-table. Disable with `AuditLogEnabled: false`. Read recent entries via the
-DB or — once you wire it — a future `/api/monitoring/audit` endpoint.
+table. Disable with `AuditLogEnabled: false`. Recent entries are queryable
+via `GET /api/monitoring/audit` with optional `from`/`to`/`actor`/`action`
+filters; `take` is clamped to `[1, 1000]`. The table is auto-created on
+server start (see `DbSync` in `NohddX.Server`) so older dev databases get
+the new schema without a manual migration.
+
+## iSCSI link-layer integrity (CHAP + Digests)
+
+When the iSCSI target traverses an untrusted L2 (multi-tenant lab, shared
+VLAN), enable both authentication and per-PDU digests:
+
+```jsonc
+"NohddX": {
+  "Iscsi": {
+    "ChapEnabled":   true,
+    "ChapUsername":  "nohddx-target",
+    "ChapPassword":  "<32+ char shared secret>"
+  }
+}
+```
+
+- **CHAP-MD5** is enforced on every login when `ChapEnabled=true`. Anonymous
+  `AuthMethod=None` and attempts to skip the security stage are rejected
+  with status `0x0201` (Authentication Failure). Passwords are compared
+  with `CryptographicOperations.FixedTimeEquals` so timing attacks can't
+  enumerate credentials.
+- **HeaderDigest=CRC32C** and **DataDigest=CRC32C** are negotiated when the
+  initiator offers them. Castagnoli polynomial (RFC 3385); each PDU's BHS
+  and padded data segment are CRC'd. Mismatch drops the connection.
 
 ## Bootstrap token
 

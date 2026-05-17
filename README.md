@@ -98,25 +98,44 @@ chain http://192.168.1.10:8080/api/boot/${mac:hexhyp}.ipxe
 
 In the WPF console (`NohddX.Ui` — runs on Windows):
 
-1. **Images** tab → register your VHD-backed OS image.
-2. **Clients** tab → either wait for an unknown client to PXE-boot
-   (NoHddX will register it automatically as "unassigned"), or enter
-   the MAC manually.
-3. Assign an image to the client.
-4. Wake / reboot the target → it iSCSI-boots into the assigned image.
+1. **Settings** → **Connection** tab: enter the server URL and (in
+   production) the admin API key. Hit *Test connection* to confirm
+   reachability, then *Save*.
+2. **Images** tab → register your VHD-backed OS image.
+3. **Clients** tab → either wait for an unknown client to PXE-boot
+   (NoHddX will register it automatically as "unassigned"), or click
+   *Add Client* and enter the MAC. MAC accepts any common format
+   (`AA:BB:CC:DD:EE:FF`, `AA-BB-CC-DD-EE-FF`, `AABBCCDDEEFF`); it is
+   normalised to `AA-BB-CC-DD-EE-FF` internally.
+4. Select the client → *Assign Image* → pick from the image list.
+   This also registers an iSCSI target in the running session so the
+   client can boot immediately (no server restart needed).
+5. *Wake* or hardware-reboot the target → it iSCSI-boots into the
+   assigned image. The Dashboard tab updates live over SignalR.
+
+Per-client overlay (CoW) data is reset by selecting the client and
+choosing *Reset overlay* — useful for kiosks that should boot fresh
+each session.
 
 The `NohddX.Agent` Linux mini-OS binary is an alternative path: build
 it with `dotnet publish -r linux-x64 --self-contained` and embed it in
 a Linux ISO that you boot instead of straight iPXE. The agent will
 auto-discover the server via UDP broadcast (port 4012), register, and
-let the operator pick **persistent install**, **diskless USB+net**, or
-**network boot**.
+let the operator pick **persistent install** (downloads + writes the
+image to a local disk; fully implemented), **diskless USB+net**, or
+**network boot** (these two delegate to server-provided scripts and
+expect a Linux runtime with `iscsiadm`/`kexec`).
 
 ## REST endpoints (cheat sheet)
 
+MAC address path parameters are matched case-insensitively in the canonical
+`AA-BB-CC-DD-EE-FF` form (uppercase hyphen-separated) — this matches what
+iPXE substitutes for `${mac:hexhyp}`. Colon-separated input is accepted in
+JSON bodies but stored in hyphen form server-side.
+
 | Method | Path                              | Used by  | Description                              |
 |--------|-----------------------------------|----------|------------------------------------------|
-| GET    | `/api/agents/ping`                | Agent    | Discovery / liveness probe               |
+| GET    | `/api/agents/ping`                | Agent    | Discovery / liveness probe (open)        |
 | POST   | `/api/agents/register`            | Agent    | Register, send hardware snapshot         |
 | POST   | `/api/agents/{id}/status`         | Agent    | Progress / state update                  |
 | POST   | `/api/agents/{id}/install`        | Agent    | Get install instructions (URL + size)    |
@@ -124,10 +143,18 @@ let the operator pick **persistent install**, **diskless USB+net**, or
 | GET    | `/api/clients`                    | UI       | List registered clients                  |
 | POST   | `/api/clients`                    | UI       | Manually register a client               |
 | POST   | `/api/clients/{id}/assign`        | UI       | Assign an image to a client              |
+| POST   | `/api/clients/{id}/wake`          | UI       | Wake-on-LAN to the client                |
+| POST   | `/api/clients/{id}/reset`         | UI       | Drop the per-client CoW overlay          |
 | GET    | `/api/images`                     | UI       | List boot images                         |
 | GET    | `/api/images/{id}/download`       | Agent    | Stream the raw image bytes               |
+| GET    | `/api/cluster/status`             | UI       | Cluster nodes + leader + load            |
+| GET    | `/api/storage/health`             | UI       | Pool totals + RAID status                |
+| GET    | `/api/storage/disks`              | UI       | Per-disk health (portable, no SMART yet) |
+| GET    | `/api/monitoring/health`          | UI       | Per-component health (iSCSI/TFTP/DHCP)   |
+| GET    | `/api/monitoring/audit`           | UI       | Recent audit log entries (filterable)    |
 
-A live SignalR hub at `/hubs/dashboard` pushes status changes to the UI.
+A live SignalR hub at `/hubs/dashboard` pushes `ClientStatusChanged` /
+`BootEventOccurred` / `ClusterStateChanged` notifications to the operator UI.
 
 ## Development
 
@@ -173,13 +200,40 @@ Raft RPC control plane. Read the full guide before deploying:
 - `appsettings.Production.json` — template that wires HTTPS on 8443 and
   pulls every secret from environment variables.
 
+## iSCSI protocol features
+
+The target speaks enough RFC 3720 to boot Windows / Linux clients from
+real OS images. Negotiable features in current builds:
+
+| Feature | Status | Notes |
+|---|---|---|
+| Login auth: `None` | ✓ | Default when `NohddX:Iscsi:ChapEnabled=false` |
+| Login auth: `CHAP` (MD5) | ✓ | Enforced when `ChapEnabled=true`; rejects `AuthMethod=None` and security-stage bypass |
+| `HeaderDigest=CRC32C` | ✓ | Negotiated when initiator offers; CRC over the 48-byte BHS |
+| `DataDigest=CRC32C` | ✓ | Negotiated when initiator offers; CRC over padded data segment |
+| `MaxRecvDataSegmentLength` | ✓ | Negotiated `min(offered, 262144)`; defaults to RFC 8192 |
+| `MaxBurstLength` | ✓ | Negotiated; Data-In F-bit + DataSN reset at each burst boundary |
+| `InitialR2T` / Data-Out | ✓ | Multi-PDU writes work; Microsoft / Linux iSCSI initiators tested |
+| SCSI: Inquiry / TestUnitReady / ReadCapacity 10+16 / Read 10+16 / Write 10+16 / ModeSense / ReportLuns | ✓ | Sufficient for boot + steady-state I/O |
+
 ## Tests
 
 ```powershell
 dotnet test
 ```
 
-The `tests/NohddX.Tests` project covers BlockMap persistence, the CoW
-overlay engine (writes don't touch the base, per-client isolation, reset
-revert), iSCSI PDU parsing, DHCP packet round-trip, the iPXE script
-generator path, agent token signing/expiry, and Raft envelope wire format.
+The `tests/NohddX.Tests` project covers (77 tests as of last commit):
+
+- BlockMap persistence
+- CoW overlay engine (writes don't touch the base, per-client isolation, reset revert)
+- iSCSI PDU parse/build, CRC32C wire format
+- CHAP MD5 handshake (full path + every rejection mode)
+- R2T multi-PDU write reassembly
+- Per-burst Data-In framing (DataSN reset, BufferOffset monotonicity)
+- Digest negotiation policy (CRC32C preferred, unknown algos → None)
+- DHCP packet round-trip
+- BootEndpointHandler MAC normalization
+- ClientManager iSCSI hook + MAC normalization
+- IscsiTargetBootstrap re-hydration
+- Agent token signing/expiry
+- Raft envelope wire format
