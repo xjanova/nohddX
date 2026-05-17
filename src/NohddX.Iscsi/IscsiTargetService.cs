@@ -176,6 +176,29 @@ public class IscsiTargetService : BackgroundService, IIscsiTargetManager
                 if (!await ReadExactAsync(stream, header, ct))
                     break;
 
+                // Login PDUs (opcode 0x03) are NEVER digested — digest
+                // applies only after operational negotiation completes.
+                byte opcode = (byte)(header[0] & 0x3F);
+                bool digestThisPdu = opcode != IscsiConstants.OpcodeLoginRequest;
+
+                // 1b. If digests negotiated, the header has 4 extra bytes of CRC32C.
+                if (digestThisPdu && session.HeaderDigestEnabled)
+                {
+                    var hd = new byte[4];
+                    if (!await ReadExactAsync(stream, hd, ct))
+                        break;
+
+                    uint received = (uint)((hd[0] << 24) | (hd[1] << 16) | (hd[2] << 8) | hd[3]);
+                    uint expected = Crc32C.Compute(header);
+                    if (received != expected)
+                    {
+                        _logger.LogWarning(
+                            "HeaderDigest mismatch on session {SessionId}: got 0x{Got:X8}, expected 0x{Exp:X8}",
+                            session.SessionId, received, expected);
+                        break;
+                    }
+                }
+
                 // 2. Parse data segment length from header bytes 5-7
                 uint dataLen = (uint)((header[5] << 16) | (header[6] << 8) | header[7]);
                 if (dataLen > IscsiConstants.MaxDataSegmentLength)
@@ -188,15 +211,34 @@ public class IscsiTargetService : BackgroundService, IIscsiTargetManager
                 // 3. Read data segment (padded to 4-byte boundary)
                 int paddedLen = (int)((dataLen + 3) & ~3u);
                 var dataSegment = Array.Empty<byte>();
+                byte[] paddedData = Array.Empty<byte>();
                 if (paddedLen > 0)
                 {
-                    var paddedData = new byte[paddedLen];
+                    paddedData = new byte[paddedLen];
                     if (!await ReadExactAsync(stream, paddedData, ct))
                         break;
 
                     // Trim to actual length (remove padding)
                     dataSegment = new byte[dataLen];
                     Array.Copy(paddedData, dataSegment, dataLen);
+                }
+
+                // 3b. Data digest, if negotiated and this PDU carries data.
+                if (digestThisPdu && session.DataDigestEnabled && paddedLen > 0)
+                {
+                    var dd = new byte[4];
+                    if (!await ReadExactAsync(stream, dd, ct))
+                        break;
+
+                    uint received = (uint)((dd[0] << 24) | (dd[1] << 16) | (dd[2] << 8) | dd[3]);
+                    uint expected = Crc32C.Compute(paddedData);
+                    if (received != expected)
+                    {
+                        _logger.LogWarning(
+                            "DataDigest mismatch on session {SessionId}: got 0x{Got:X8}, expected 0x{Exp:X8}",
+                            session.SessionId, received, expected);
+                        break;
+                    }
                 }
 
                 // 4. Parse PDU
@@ -234,17 +276,7 @@ public class IscsiTargetService : BackgroundService, IIscsiTargetManager
                 // 6. Send responses
                 foreach (var response in responses)
                 {
-                    var responseBytes = response.ToBytes();
-                    await session.WriteLock.WaitAsync(ct);
-                    try
-                    {
-                        await stream.WriteAsync(responseBytes, ct);
-                        await stream.FlushAsync(ct);
-                    }
-                    finally
-                    {
-                        session.WriteLock.Release();
-                    }
+                    await SendPduAsync(stream, response, session, ct);
                 }
 
                 // If we sent a logout response, close the connection
@@ -333,12 +365,21 @@ public class IscsiTargetService : BackgroundService, IIscsiTargetManager
         }
         session.MaxRecvDataSegmentLength = negotiatedMaxRecv;
 
+        // HeaderDigest / DataDigest negotiation (RFC 3720 §12.1):
+        // initiator sends a comma-list of preferences (e.g. "CRC32C,None");
+        // target picks ONE. Our policy is CRC32C-preferred (better integrity),
+        // falling back to None when the initiator can't do CRC32C. Once we
+        // pick a non-None digest, every non-login PDU in this session must
+        // carry the digest bytes — see HandleClientAsync read/write paths.
+        string headerDigest = PickDigest(textParams.GetValueOrDefault("HeaderDigest"));
+        string dataDigest = PickDigest(textParams.GetValueOrDefault("DataDigest"));
+
         // Build response text parameters
         var responseParams = new Dictionary<string, string>
         {
             ["TargetPortalGroupTag"] = "1",
-            ["HeaderDigest"] = "None",
-            ["DataDigest"] = "None",
+            ["HeaderDigest"] = headerDigest,
+            ["DataDigest"] = dataDigest,
             ["DefaultTime2Wait"] = "0",
             ["DefaultTime2Retain"] = "0",
             ["MaxRecvDataSegmentLength"] = negotiatedMaxRecv.ToString(),
@@ -357,6 +398,13 @@ public class IscsiTargetService : BackgroundService, IIscsiTargetManager
             if (kvp.Key == "SessionType")
                 responseParams["SessionType"] = kvp.Value;
         }
+
+        // Stash the digest choice on the session — read/write loops use it
+        // to know whether to expect/emit the 4-byte CRC after BHS / after
+        // padded data segment. The choice takes effect for the FIRST PDU
+        // after the login transit (this login response itself is not digested).
+        session.HeaderDigestEnabled = headerDigest == "CRC32C";
+        session.DataDigestEnabled = dataDigest == "CRC32C";
 
         // If transitioning to full feature phase, open the disk
         if (transit && nsg == IscsiConstants.LoginStageFullFeaturePhase)
@@ -587,6 +635,26 @@ public class IscsiTargetService : BackgroundService, IIscsiTargetManager
             transit: false);
     }
 
+    /// <summary>
+    /// Choose a HeaderDigest / DataDigest value from the initiator's offered
+    /// comma-list. We prefer CRC32C when present (RFC 3720 only defines two
+    /// algorithms: CRC32C and None; future RFCs may add more). If the
+    /// initiator omits the key entirely we default to None.
+    /// </summary>
+    private static string PickDigest(string? offered)
+    {
+        if (string.IsNullOrWhiteSpace(offered))
+            return "None";
+
+        var algos = offered.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var a in algos)
+        {
+            if (string.Equals(a, "CRC32C", StringComparison.OrdinalIgnoreCase))
+                return "CRC32C";
+        }
+        return "None";
+    }
+
     // ------------------------------------------------------------------
     // NOP-Out handler
     // ------------------------------------------------------------------
@@ -664,6 +732,73 @@ public class IscsiTargetService : BackgroundService, IIscsiTargetManager
 
         return new List<IscsiPdu> { reject };
     }
+
+    // ------------------------------------------------------------------
+    // PDU framing on the wire — appends CRC32C digests when negotiated.
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Write a PDU to the network stream, splicing in HeaderDigest /
+    /// DataDigest CRC32C bytes when those features were negotiated during
+    /// login. Login-response PDUs are never digested per RFC 3720.
+    /// </summary>
+    private async Task SendPduAsync(NetworkStream stream, IscsiPdu pdu, IscsiSession session, CancellationToken ct)
+    {
+        var bytes = pdu.ToBytes();
+
+        bool digestThisPdu =
+            pdu.Opcode != IscsiConstants.OpcodeLoginResponse &&
+            pdu.Opcode != IscsiConstants.OpcodeLoginRequest;
+        bool wantHeader = digestThisPdu && session.HeaderDigestEnabled;
+        bool wantData = digestThisPdu && session.DataDigestEnabled && bytes.Length > IscsiConstants.HeaderSize;
+
+        await session.WriteLock.WaitAsync(ct);
+        try
+        {
+            if (!wantHeader && !wantData)
+            {
+                // Fast path: no digests, single write.
+                await stream.WriteAsync(bytes, ct);
+                await stream.FlushAsync(ct);
+                return;
+            }
+
+            // Slow path: write BHS, optional header digest, padded data, optional data digest.
+            var bhs = bytes.AsMemory(0, IscsiConstants.HeaderSize);
+            var paddedData = bytes.AsMemory(IscsiConstants.HeaderSize);
+
+            await stream.WriteAsync(bhs, ct);
+            if (wantHeader)
+            {
+                uint hd = Crc32C.Compute(bhs.Span);
+                await stream.WriteAsync(BigEndian(hd), ct);
+            }
+
+            if (paddedData.Length > 0)
+            {
+                await stream.WriteAsync(paddedData, ct);
+                if (wantData)
+                {
+                    uint dd = Crc32C.Compute(paddedData.Span);
+                    await stream.WriteAsync(BigEndian(dd), ct);
+                }
+            }
+
+            await stream.FlushAsync(ct);
+        }
+        finally
+        {
+            session.WriteLock.Release();
+        }
+    }
+
+    private static byte[] BigEndian(uint v) => new[]
+    {
+        (byte)(v >> 24),
+        (byte)(v >> 16),
+        (byte)(v >> 8),
+        (byte)v,
+    };
 
     // ------------------------------------------------------------------
     // Network I/O helpers

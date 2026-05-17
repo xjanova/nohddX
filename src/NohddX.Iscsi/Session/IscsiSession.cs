@@ -32,6 +32,15 @@ public class IscsiSession
     /// <summary>Whether the session has completed login and entered full feature phase.</summary>
     public bool IsFullFeaturePhase { get; set; }
 
+    /// <summary>
+    /// Per-direction digest negotiation results from login (RFC 3720 §12.1).
+    /// Only consulted for non-login PDUs; login PDUs themselves are never
+    /// digested. Both default to false ("None") so a session that hasn't
+    /// negotiated yet behaves like an old client.
+    /// </summary>
+    public bool HeaderDigestEnabled { get; set; }
+    public bool DataDigestEnabled { get; set; }
+
     // ── CHAP state (only used when NohddX:Iscsi:ChapEnabled is true) ─────
     // The CHAP handshake spans multiple Login PDUs so we have to remember
     // the challenge we issued in step 2 when verifying the response in step 3.
