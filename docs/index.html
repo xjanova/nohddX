@@ -1,0 +1,996 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>NoHddX — Diskless Boot Platform สำหรับองค์กร</title>
+<meta name="description" content="NoHddX คือระบบ Diskless Boot ระดับองค์กร บูตเครื่องไคลเอนต์ทั้งฟลีตจาก image กลางผ่าน PXE/iPXE + iSCSI โดยไม่ต้องใช้ฮาร์ดดิสก์ในเครื่อง" />
+<meta property="og:title" content="NoHddX — Diskless Boot Platform" />
+<meta property="og:description" content="บูตเครื่อง 1 → 1,000 เครื่องจาก image กลาง ผ่าน PXE + iSCSI ไม่มีฮาร์ดดิสก์ในเครื่อง" />
+<meta property="og:type" content="website" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;600&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #07090d;
+  --bg-soft: #0d1117;
+  --bg-card: #11161f;
+  --line: #1e2632;
+  --line-strong: #2a3445;
+  --fg: #e6edf3;
+  --fg-mute: #8b949e;
+  --fg-dim: #6e7681;
+  --accent: #7c5cff;
+  --accent-2: #22d3ee;
+  --accent-3: #34d399;
+  --warn: #fbbf24;
+  --danger: #f87171;
+  --radius: 14px;
+  --shadow: 0 20px 60px -20px rgba(124, 92, 255, 0.35);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: 'Sarabun', 'Inter', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  line-height: 1.65;
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+code, pre, .mono { font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace; }
+
+a { color: var(--accent-2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ---- Background glow ---- */
+.bg-orbs {
+  position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none;
+}
+.bg-orbs::before, .bg-orbs::after {
+  content: ""; position: absolute; border-radius: 50%; filter: blur(120px); opacity: .55;
+}
+.bg-orbs::before {
+  width: 520px; height: 520px; left: -120px; top: -120px;
+  background: radial-gradient(circle, #7c5cff 0%, transparent 70%);
+}
+.bg-orbs::after {
+  width: 560px; height: 560px; right: -160px; top: 280px;
+  background: radial-gradient(circle, #22d3ee 0%, transparent 70%);
+}
+
+/* ---- Layout ---- */
+.wrap { max-width: 1140px; margin: 0 auto; padding: 0 24px; }
+
+nav {
+  position: sticky; top: 0; z-index: 50;
+  backdrop-filter: blur(16px);
+  background: rgba(7,9,13,0.75);
+  border-bottom: 1px solid var(--line);
+}
+nav .wrap {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 64px;
+}
+.brand {
+  display: flex; align-items: center; gap: 10px;
+  font-weight: 800; letter-spacing: -.01em; font-size: 18px;
+  color: var(--fg);
+}
+.brand .logo {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent) 0%, var(--accent-2) 100%);
+  display: grid; place-items: center;
+  font-size: 14px; color: #07090d; font-weight: 800;
+  box-shadow: 0 0 20px rgba(124,92,255,0.6);
+}
+nav ul {
+  list-style: none; display: flex; gap: 28px; margin: 0; padding: 0;
+}
+nav a { color: var(--fg-mute); font-size: 14.5px; }
+nav a:hover { color: var(--fg); text-decoration: none; }
+.nav-cta {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #07090d !important;
+  padding: 8px 16px; border-radius: 999px;
+  font-weight: 700; font-size: 14px;
+}
+.nav-cta:hover { text-decoration: none; opacity: .92; }
+
+@media (max-width: 720px) {
+  nav ul { display: none; }
+}
+
+/* ---- Hero ---- */
+.hero {
+  padding: 88px 0 80px;
+  text-align: center;
+}
+.hero .pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: rgba(124,92,255,0.12);
+  border: 1px solid rgba(124,92,255,0.35);
+  color: #c7bdff;
+  padding: 6px 14px; border-radius: 999px;
+  font-size: 13px; font-weight: 600;
+  margin-bottom: 24px;
+}
+.hero h1 {
+  font-family: 'Inter', sans-serif;
+  font-size: clamp(40px, 6vw, 68px);
+  line-height: 1.05; letter-spacing: -.02em;
+  margin: 0 0 22px;
+  font-weight: 800;
+}
+.hero h1 .grad {
+  background: linear-gradient(135deg, #a78bfa 0%, #22d3ee 60%, #34d399 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero p.lead {
+  font-size: clamp(17px, 1.7vw, 20px);
+  color: var(--fg-mute);
+  max-width: 760px; margin: 0 auto 36px;
+}
+.hero .ctas {
+  display: flex; gap: 14px; justify-content: center; flex-wrap: wrap;
+}
+.btn {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 14px 24px;
+  border-radius: 12px;
+  font-weight: 700;
+  font-size: 15px;
+  transition: transform .15s ease, box-shadow .2s ease, opacity .2s ease;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.btn:hover { transform: translateY(-1px); text-decoration: none; }
+.btn-primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #07090d;
+  box-shadow: var(--shadow);
+}
+.btn-ghost {
+  background: var(--bg-card);
+  color: var(--fg);
+  border-color: var(--line-strong);
+}
+.btn-ghost:hover { background: #161d29; }
+
+.hero-stats {
+  margin-top: 64px;
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px;
+  max-width: 880px; margin-left: auto; margin-right: auto;
+}
+.hero-stats .stat {
+  text-align: center;
+  padding: 18px 8px;
+}
+.hero-stats .num {
+  font-family: 'Inter', sans-serif;
+  font-size: 32px; font-weight: 800; letter-spacing: -.02em;
+  background: linear-gradient(135deg, #a78bfa, #22d3ee);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.hero-stats .label {
+  font-size: 13px; color: var(--fg-mute); margin-top: 4px;
+}
+@media (max-width: 640px) {
+  .hero-stats { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ---- Section ---- */
+section { padding: 84px 0; position: relative; }
+.section-eyebrow {
+  display: inline-block;
+  font-size: 12px; font-weight: 700;
+  letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent-2);
+  margin-bottom: 12px;
+}
+.section-title {
+  font-family: 'Inter', sans-serif;
+  font-size: clamp(28px, 3.6vw, 42px);
+  letter-spacing: -.01em;
+  font-weight: 800;
+  margin: 0 0 14px;
+  color: var(--fg);
+}
+.section-sub {
+  color: var(--fg-mute); font-size: 17px; max-width: 720px;
+  margin: 0 0 48px;
+}
+
+/* ---- Pain → Gain ---- */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 820px) { .split { grid-template-columns: 1fr; } }
+.painbox, .gainbox {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 28px;
+}
+.painbox h3, .gainbox h3 { margin: 0 0 16px; font-size: 18px; }
+.painbox h3 { color: var(--danger); }
+.gainbox h3 { color: var(--accent-3); }
+.painbox ul, .gainbox ul {
+  list-style: none; padding: 0; margin: 0;
+}
+.painbox li, .gainbox li {
+  padding: 10px 0 10px 28px; position: relative;
+  color: var(--fg); border-top: 1px solid var(--line);
+  font-size: 15px;
+}
+.painbox li:first-child, .gainbox li:first-child { border-top: 0; }
+.painbox li::before, .gainbox li::before {
+  position: absolute; left: 0; top: 12px;
+  width: 20px; height: 20px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 11px; font-weight: 800;
+}
+.painbox li::before { content: "✕"; background: rgba(248,113,113,.15); color: var(--danger); }
+.gainbox li::before { content: "✓"; background: rgba(52,211,153,.15); color: var(--accent-3); }
+
+/* ---- How it works ---- */
+.flow {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 32px;
+  margin-top: 24px;
+}
+.flow-steps {
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 0;
+  position: relative;
+}
+@media (max-width: 900px) { .flow-steps { grid-template-columns: 1fr; } }
+.flow-step {
+  text-align: center; padding: 20px 12px;
+  position: relative;
+}
+.flow-step .step-num {
+  width: 44px; height: 44px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #07090d; font-weight: 800; font-size: 18px;
+  display: grid; place-items: center;
+  margin: 0 auto 14px;
+  box-shadow: 0 0 24px rgba(124,92,255,.45);
+}
+.flow-step .step-title {
+  font-weight: 700; font-size: 15px; margin-bottom: 6px;
+}
+.flow-step .step-desc {
+  font-size: 13px; color: var(--fg-mute); line-height: 1.5;
+}
+.flow-step:not(:last-child)::after {
+  content: ""; position: absolute; top: 42px; right: -10px; width: 20px; height: 2px;
+  background: linear-gradient(90deg, var(--accent), transparent);
+}
+@media (max-width: 900px) {
+  .flow-step:not(:last-child)::after { display: none; }
+}
+
+/* ---- Features grid ---- */
+.feature-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px;
+}
+@media (max-width: 920px) { .feature-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .feature-grid { grid-template-columns: 1fr; } }
+.feature {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 24px;
+  transition: border-color .2s ease, transform .2s ease;
+}
+.feature:hover {
+  border-color: var(--line-strong);
+  transform: translateY(-2px);
+}
+.feature .icon {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: rgba(124,92,255,.15);
+  display: grid; place-items: center;
+  font-size: 20px; margin-bottom: 14px;
+}
+.feature h4 {
+  margin: 0 0 8px; font-size: 16px; font-weight: 700;
+}
+.feature p {
+  margin: 0; color: var(--fg-mute); font-size: 14px; line-height: 1.6;
+}
+
+/* ---- Architecture ---- */
+.arch {
+  background: linear-gradient(180deg, var(--bg-card) 0%, #0c111a 100%);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 32px;
+  display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: center;
+}
+@media (max-width: 900px) { .arch { grid-template-columns: 1fr; } }
+.arch-modules {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+}
+.mod {
+  background: #0a0e15;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+}
+.mod .mod-name {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600; color: var(--accent-2);
+  font-size: 12.5px;
+  display: block; margin-bottom: 2px;
+}
+.mod .mod-desc { color: var(--fg-mute); font-size: 12px; }
+
+/* ---- Code block ---- */
+.code {
+  background: #060810;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px 20px;
+  overflow-x: auto;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 13.5px;
+  line-height: 1.7;
+}
+.code .c-comment { color: var(--fg-dim); }
+.code .c-key { color: var(--accent); }
+.code .c-str { color: var(--accent-3); }
+.code .c-num { color: var(--warn); }
+.code .c-cmd { color: var(--accent-2); }
+
+/* ---- Use cases ---- */
+.usecases {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+}
+@media (max-width: 920px) { .usecases { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 520px) { .usecases { grid-template-columns: 1fr; } }
+.uc {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 22px;
+  text-align: left;
+}
+.uc .uc-icon { font-size: 28px; margin-bottom: 10px; display: block; }
+.uc h4 { margin: 0 0 6px; font-size: 15px; }
+.uc p { margin: 0; color: var(--fg-mute); font-size: 13.5px; line-height: 1.6; }
+
+/* ---- Pricing ---- */
+.pricing {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px;
+}
+@media (max-width: 880px) { .pricing { grid-template-columns: 1fr; } }
+.plan {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 28px;
+  position: relative;
+}
+.plan.featured {
+  border-color: rgba(124,92,255,.55);
+  background: linear-gradient(180deg, rgba(124,92,255,.08) 0%, var(--bg-card) 100%);
+  box-shadow: 0 0 40px -10px rgba(124,92,255,.4);
+}
+.plan .tag {
+  position: absolute; top: -12px; right: 20px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #07090d; font-size: 11px; font-weight: 800;
+  padding: 4px 12px; border-radius: 999px;
+  letter-spacing: .05em; text-transform: uppercase;
+}
+.plan h3 { margin: 0 0 6px; font-size: 18px; }
+.plan .price {
+  font-family: 'Inter', sans-serif;
+  font-size: 36px; font-weight: 800; letter-spacing: -.02em;
+  margin: 12px 0 4px;
+}
+.plan .price small { font-size: 14px; font-weight: 500; color: var(--fg-mute); }
+.plan .desc { color: var(--fg-mute); font-size: 14px; margin: 0 0 18px; }
+.plan ul {
+  list-style: none; padding: 0; margin: 0 0 22px;
+}
+.plan li {
+  padding: 8px 0 8px 24px; position: relative; font-size: 14px;
+  border-top: 1px solid var(--line);
+}
+.plan li:first-child { border-top: 0; }
+.plan li::before {
+  content: "✓"; position: absolute; left: 0; top: 8px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: rgba(52,211,153,.15); color: var(--accent-3);
+  display: grid; place-items: center; font-size: 11px; font-weight: 800;
+}
+.plan .btn { width: 100%; justify-content: center; }
+
+/* ---- FAQ ---- */
+.faq details {
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px 22px;
+  margin-bottom: 12px;
+  transition: border-color .2s ease;
+}
+.faq details[open] { border-color: var(--line-strong); }
+.faq summary {
+  cursor: pointer; font-weight: 600; font-size: 15.5px;
+  list-style: none; display: flex; justify-content: space-between; align-items: center;
+}
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after {
+  content: "+"; font-size: 22px; font-weight: 400; color: var(--accent-2);
+  transition: transform .2s ease;
+}
+.faq details[open] summary::after { content: "−"; }
+.faq .answer {
+  padding-top: 14px; color: var(--fg-mute); font-size: 14.5px; line-height: 1.7;
+}
+
+/* ---- CTA ---- */
+.cta-banner {
+  background: linear-gradient(135deg, rgba(124,92,255,.18), rgba(34,211,238,.12));
+  border: 1px solid rgba(124,92,255,.35);
+  border-radius: 20px;
+  padding: 48px 36px;
+  text-align: center;
+  margin-bottom: 40px;
+}
+.cta-banner h2 {
+  font-family: 'Inter', sans-serif;
+  font-size: clamp(26px, 3.2vw, 36px); margin: 0 0 12px;
+  letter-spacing: -.01em; font-weight: 800;
+}
+.cta-banner p { color: var(--fg-mute); margin: 0 0 24px; }
+.cta-banner .ctas { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; }
+
+/* ---- Footer ---- */
+footer {
+  border-top: 1px solid var(--line);
+  padding: 36px 0;
+  color: var(--fg-dim); font-size: 13.5px;
+}
+footer .wrap {
+  display: flex; justify-content: space-between; align-items: center;
+  flex-wrap: wrap; gap: 16px;
+}
+footer a { color: var(--fg-mute); margin-left: 18px; }
+
+/* ---- iSCSI feature table ---- */
+.tbl {
+  width: 100%; border-collapse: collapse;
+  background: var(--bg-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font-size: 14px;
+}
+.tbl th, .tbl td {
+  padding: 12px 16px; text-align: left;
+  border-bottom: 1px solid var(--line);
+}
+.tbl th {
+  background: #0a0e15; color: var(--fg-mute);
+  font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+}
+.tbl tr:last-child td { border-bottom: 0; }
+.tbl td.ok { color: var(--accent-3); font-weight: 600; }
+.tbl td.mono { font-family: 'IBM Plex Mono', monospace; font-size: 13px; }
+</style>
+</head>
+<body>
+
+<div class="bg-orbs"></div>
+
+<nav>
+  <div class="wrap">
+    <a href="#" class="brand">
+      <span class="logo">N</span>
+      <span>NoHddX</span>
+    </a>
+    <ul>
+      <li><a href="#how">หลักการทำงาน</a></li>
+      <li><a href="#features">คุณสมบัติ</a></li>
+      <li><a href="#arch">สถาปัตยกรรม</a></li>
+      <li><a href="#pricing">ราคา</a></li>
+      <li><a href="#faq">FAQ</a></li>
+    </ul>
+    <a class="nav-cta" href="#contact">ติดต่อซื้อ</a>
+  </div>
+</nav>
+
+<!-- ============ HERO ============ -->
+<header class="hero">
+  <div class="wrap">
+    <div class="pill">⚡ .NET 8 · Open Source · Enterprise-grade</div>
+    <h1>
+      บูตเครื่องทั้งฟลีต<br/>
+      <span class="grad">โดยไม่ต้องมีฮาร์ดดิสก์</span>
+    </h1>
+    <p class="lead">
+      NoHddX คือแพลตฟอร์ม <strong>Diskless Boot</strong> ระดับองค์กร
+      ที่ให้คุณบูตเครื่องคอมพิวเตอร์ 1 ถึง 1,000 เครื่อง
+      จาก OS image กลางเพียง image เดียว
+      ผ่าน PXE / iPXE และโปรโตคอล iSCSI มาตรฐาน
+      — ไม่ต้องลง Windows ทีละเครื่อง ไม่ต้องเปลี่ยน SSD เวลาพัง
+      รีเซ็ตเครื่องกลับสู่สภาพเดิมได้ในคลิกเดียว
+    </p>
+    <div class="ctas">
+      <a href="#pricing" class="btn btn-primary">ดูแพ็กเกจราคา →</a>
+      <a href="https://github.com/xjanova/nohddx" class="btn btn-ghost">⭐ ดูซอร์สโค้ดบน GitHub</a>
+    </div>
+
+    <div class="hero-stats">
+      <div class="stat">
+        <div class="num">1 → 1,000</div>
+        <div class="label">เครื่องลูกข่ายต่อเซิร์ฟเวอร์</div>
+      </div>
+      <div class="stat">
+        <div class="num">0 ฮาร์ดดิสก์</div>
+        <div class="label">ต้องการในเครื่องไคลเอนต์</div>
+      </div>
+      <div class="stat">
+        <div class="num">77+</div>
+        <div class="label">unit tests ครอบคลุม core</div>
+      </div>
+      <div class="stat">
+        <div class="num">RFC 3720</div>
+        <div class="label">iSCSI target พูดมาตรฐานจริง</div>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ============ PAIN → GAIN ============ -->
+<section id="why">
+  <div class="wrap">
+    <div class="section-eyebrow">ทำไมต้อง Diskless</div>
+    <h2 class="section-title">ปัญหาแอดมินที่ NoHddX แก้ได้</h2>
+    <p class="section-sub">
+      ห้องแล็บคอม โรงเรียน อินเทอร์เน็ตคาเฟ่ คีออสก์ POS ออฟฟิศ —
+      ทุกที่ที่มีเครื่องเหมือนกันจำนวนมาก มีปัญหาเดียวกันหมด
+    </p>
+
+    <div class="split">
+      <div class="painbox">
+        <h3>เดิม: บริหารทีละเครื่อง</h3>
+        <ul>
+          <li>ลง Windows ใหม่ทุก 6 เดือนเพราะไวรัส / ผู้ใช้ลงโปรแกรมมั่ว</li>
+          <li>SSD พังต้องซื้อใหม่ + ลง OS ใหม่</li>
+          <li>อัปเดตซอฟต์แวร์ต้องเดินไปลงทีละเครื่อง</li>
+          <li>เครื่อง 50 ตัวมี 50 สถานะ ไม่มีใครรู้ว่าตัวไหนพร้อมใช้</li>
+          <li>ผู้ใช้ลบไฟล์ระบบเล่น — เครื่องเจ๊ง</li>
+        </ul>
+      </div>
+
+      <div class="gainbox">
+        <h3>NoHddX: ภาพเดียวคุมทั้งฟลีต</h3>
+        <ul>
+          <li>แก้ image กลางครั้งเดียว เครื่องทั้งหมดอัปเดตพร้อมกัน</li>
+          <li>เครื่องไคลเอนต์ไม่มีดิสก์ → ไม่มีอะไรพัง ไม่มีอะไรหาย</li>
+          <li>รีบูตเครื่อง = รีเซ็ตกลับสภาพเดิม (Copy-on-Write overlay)</li>
+          <li>Dashboard เดียวเห็นสถานะทั้งฟลีตแบบเรียลไทม์</li>
+          <li>Wake-on-LAN เปิด/ปิดทั้งห้องจากที่นั่งแอดมิน</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ HOW IT WORKS ============ -->
+<section id="how">
+  <div class="wrap">
+    <div class="section-eyebrow">หลักการทำงาน</div>
+    <h2 class="section-title">บูตจากศูนย์สู่หน้าจอ Windows ใน 5 ขั้น</h2>
+    <p class="section-sub">
+      ทุกครั้งที่กดเปิดเครื่อง flow เดิมจะเกิดขึ้นอัตโนมัติ —
+      ไม่มี HDD ไม่มี SSD ไม่มี USB ติดเครื่องก็ยังบูตได้
+      ขอแค่มี Network Card รองรับ PXE (มาตรฐานทุกเมนบอร์ดยุคใหม่)
+    </p>
+
+    <div class="flow">
+      <div class="flow-steps">
+        <div class="flow-step">
+          <div class="step-num">1</div>
+          <div class="step-title">PXE / DHCP</div>
+          <div class="step-desc">เมนบอร์ดขอ IP และถาม "บูตจากไหน" — NoHddX DHCP-Proxy ตอบกลับ</div>
+        </div>
+        <div class="flow-step">
+          <div class="step-num">2</div>
+          <div class="step-title">TFTP → iPXE</div>
+          <div class="step-desc">เครื่องดาวน์โหลด iPXE binary จาก TFTP ของเซิร์ฟเวอร์</div>
+        </div>
+        <div class="flow-step">
+          <div class="step-num">3</div>
+          <div class="step-title">HTTP script</div>
+          <div class="step-desc">iPXE เรียก <span class="mono">/api/boot/{mac}.ipxe</span> เพื่อรับ script ส่วนตัวของเครื่องนั้น</div>
+        </div>
+        <div class="flow-step">
+          <div class="step-num">4</div>
+          <div class="step-title">iSCSI sanboot</div>
+          <div class="step-desc">เครื่อง mount LUN ของตัวเองจาก iSCSI target — ใช้เหมือนดิสก์จริง</div>
+        </div>
+        <div class="flow-step">
+          <div class="step-num">5</div>
+          <div class="step-title">Boot OS</div>
+          <div class="step-desc">Windows/Linux โหลด bootloader จาก iSCSI แล้วบูตขึ้นปกติ</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top: 32px;">
+      <h3 style="font-size: 18px; margin: 0 0 12px;">🧠 Logic หลัก: Copy-on-Write overlay</h3>
+      <p style="color: var(--fg-mute); max-width: 880px; margin: 0 0 16px;">
+        เครื่องลูกข่าย <em>หลายเครื่อง</em> ใช้ <em>image base เดียวกัน</em>
+        แต่เขียนทับลงไปได้ — เพราะทุก write จะถูก redirect ไปยัง
+        overlay VHD เฉพาะตัวของเครื่อง ๆ นั้น
+        ทำให้:
+      </p>
+      <div class="code">
+<span class="c-comment"># 1 image base = 30 GB ใช้ร่วมกัน 100 เครื่อง</span>
+<span class="c-cmd">storage/bases/windows11-lab.vhd</span>   <span class="c-comment">// 30 GB, read-only</span>
+
+<span class="c-comment"># แต่ละเครื่องมี overlay ของตัวเอง (เก็บเฉพาะ block ที่เปลี่ยน)</span>
+<span class="c-cmd">storage/overlays/AA-BB-CC-DD-EE-01.vhd</span>  <span class="c-comment">// ~500 MB</span>
+<span class="c-cmd">storage/overlays/AA-BB-CC-DD-EE-02.vhd</span>  <span class="c-comment">// ~500 MB</span>
+
+<span class="c-comment"># แอดมินคลิก "Reset" → ลบ overlay เครื่องนั้น</span>
+<span class="c-comment"># รอบบูตหน้าเครื่องกลับสะอาดเอี่ยมเหมือนวันแรก</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FEATURES ============ -->
+<section id="features" style="background: linear-gradient(180deg, transparent, rgba(124,92,255,.04));">
+  <div class="wrap">
+    <div class="section-eyebrow">คุณสมบัติทั้งหมด</div>
+    <h2 class="section-title">ทุกอย่างที่ Diskless platform ระดับ enterprise ควรมี</h2>
+
+    <div class="feature-grid">
+      <div class="feature">
+        <div class="icon">💾</div>
+        <h4>iSCSI Target ในตัว</h4>
+        <p>พูด RFC 3720 จริง — รองรับ CHAP MD5, HeaderDigest/DataDigest (CRC32C), R2T, multi-PDU writes บูต Windows / Linux ได้</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🌳</div>
+        <h4>Copy-on-Write Overlay</h4>
+        <p>Per-client VHD overlay บน base image เดียวกัน — ประหยัดดิสก์ 95%+ รีเซ็ตกลับสภาพต้นได้ทันที</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🚀</div>
+        <h4>PXE / iPXE / TFTP</h4>
+        <p>DHCP-Proxy ไม่ชนกับ DHCP เดิมในเครือข่าย, มี TFTP server ในตัว และสร้าง iPXE script ต่อ MAC อัตโนมัติ</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🔐</div>
+        <h4>Security & Audit</h4>
+        <p>X-Admin-Api-Key + Bearer token (HMAC-SHA256) ต่อ agent, per-IP rate limit, request-size cap, audit log ทุก mutation</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🌐</div>
+        <h4>Raft Cluster (Optional)</h4>
+        <p>หลายโหนดเลือก leader, sync state ระหว่างกัน — ฟลีตใหญ่ ๆ ไม่มี single point of failure</p>
+      </div>
+      <div class="feature">
+        <div class="icon">📊</div>
+        <h4>SignalR Live Dashboard</h4>
+        <p>WPF console สำหรับแอดมิน — เห็น client status, boot event, cluster health แบบ push real-time</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🔔</div>
+        <h4>Prometheus Metrics</h4>
+        <p>Export metrics + alerts มาตรฐาน เสียบเข้า Grafana / Alertmanager ได้ทันที</p>
+      </div>
+      <div class="feature">
+        <div class="icon">⚡</div>
+        <h4>Wake-on-LAN</h4>
+        <p>ปลุกเครื่องทั้งห้องจาก dashboard, schedule เปิด/ปิดอัตโนมัติ ลด power cost</p>
+      </div>
+      <div class="feature">
+        <div class="icon">🛠️</div>
+        <h4>USB / ISO Builder</h4>
+        <p>CLI tool สร้าง bootable USB image ให้เครื่องที่ NIC ไม่รองรับ PXE — เสียบ USB แล้วบูตได้เลย</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ARCHITECTURE ============ -->
+<section id="arch">
+  <div class="wrap">
+    <div class="section-eyebrow">สถาปัตยกรรม</div>
+    <h2 class="section-title">โครงสร้างแบบ modular .NET 8</h2>
+    <p class="section-sub">
+      แต่ละ component แยกเป็น project ของตัวเอง สลับ implementation ได้
+      ทดสอบแยกได้ deploy แยกได้
+    </p>
+
+    <div class="arch">
+      <div>
+        <h3 style="margin-top: 0; font-size: 18px;">12 modules + 1 test suite</h3>
+        <p style="color: var(--fg-mute); font-size: 14.5px; margin-bottom: 16px;">
+          ทั้งระบบเขียนด้วย C# / .NET 8 รันได้ทั้ง Windows และ Linux
+          (ยกเว้น WPF UI ที่เป็น Windows-only)
+        </p>
+        <p style="color: var(--fg-mute); font-size: 14.5px;">
+          ฐานข้อมูลใช้ EF Core รองรับทั้ง <strong>SQLite</strong> (default)
+          และ <strong>PostgreSQL</strong> (production)
+        </p>
+      </div>
+
+      <div class="arch-modules">
+        <div class="mod"><span class="mod-name">NohddX.Core</span><span class="mod-desc">shared models / interfaces</span></div>
+        <div class="mod"><span class="mod-name">NohddX.Database</span><span class="mod-desc">EF Core + repositories</span></div>
+        <div class="mod"><span class="mod-name">NohddX.Storage</span><span class="mod-desc">VHD + CoW engine</span></div>
+        <div class="mod"><span class="mod-name">NohddX.Iscsi</span><span class="mod-desc">iSCSI target service</span></div>
+        <div class="mod"><span class="mod-name">NohddX.Boot</span><span class="mod-desc">DHCP-Proxy + TFTP + iPXE</span></div>
+        <div class="mod"><span class="mod-name">NohddX.Cluster</span><span class="mod-desc">Raft consensus</span></div>
+        <div class="mod"><span class="mod-name">NohddX.ClientMgmt</span><span class="mod-desc">clients + groups + WoL</span></div>
+        <div class="mod"><span class="mod-name">NohddX.Monitoring</span><span class="mod-desc">Prometheus + alerts</span></div>
+        <div class="mod"><span class="mod-name">NohddX.Api</span><span class="mod-desc">REST + SignalR hub</span></div>
+        <div class="mod"><span class="mod-name">NohddX.Server</span><span class="mod-desc">composition root</span></div>
+        <div class="mod"><span class="mod-name">NohddX.Ui</span><span class="mod-desc">WPF operator console</span></div>
+        <div class="mod"><span class="mod-name">NohddX.Agent</span><span class="mod-desc">Linux bootstrap agent</span></div>
+      </div>
+    </div>
+
+    <div style="margin-top: 32px;">
+      <h3 style="font-size: 18px; margin: 0 0 14px;">⚙️ Service / Port matrix</h3>
+      <table class="tbl">
+        <thead>
+          <tr><th>Service</th><th>Port</th><th>Proto</th><th>หน้าที่</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>HTTP API</td><td class="mono">8080</td><td>TCP</td><td>REST + SignalR + iPXE script endpoint</td></tr>
+          <tr><td>iSCSI Target</td><td class="mono">3260</td><td>TCP</td><td>เสิร์ฟ VHD-backed boot LUNs</td></tr>
+          <tr><td>TFTP</td><td class="mono">69</td><td>UDP</td><td>iPXE chainload binaries</td></tr>
+          <tr><td>DHCP-Proxy</td><td class="mono">4011</td><td>UDP</td><td>PXE next-server hint (ไม่ชน DHCP เดิม)</td></tr>
+          <tr><td>Discovery</td><td class="mono">4012</td><td>UDP</td><td>ตอบ broadcast probe ของ agent</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div style="margin-top: 32px;">
+      <h3 style="font-size: 18px; margin: 0 0 14px;">📜 iSCSI feature support</h3>
+      <table class="tbl">
+        <thead>
+          <tr><th>Feature</th><th>สถานะ</th><th>หมายเหตุ</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="mono">AuthMethod=None</td><td class="ok">✓</td><td>default เมื่อปิด CHAP</td></tr>
+          <tr><td class="mono">AuthMethod=CHAP (MD5)</td><td class="ok">✓</td><td>เปิดเมื่อ <span class="mono">ChapEnabled=true</span></td></tr>
+          <tr><td class="mono">HeaderDigest=CRC32C</td><td class="ok">✓</td><td>CRC ครอบ BHS 48 ไบต์</td></tr>
+          <tr><td class="mono">DataDigest=CRC32C</td><td class="ok">✓</td><td>CRC ครอบ data segment</td></tr>
+          <tr><td class="mono">MaxBurstLength / R2T</td><td class="ok">✓</td><td>Data-In F-bit + DataSN reset ต่อ burst</td></tr>
+          <tr><td class="mono">SCSI Read/Write 10+16</td><td class="ok">✓</td><td>เพียงพอสำหรับ steady-state I/O</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============ USE CASES ============ -->
+<section id="usecases">
+  <div class="wrap">
+    <div class="section-eyebrow">เหมาะกับใคร</div>
+    <h2 class="section-title">Use cases ที่ NoHddX เปลี่ยนเกมได้</h2>
+
+    <div class="usecases">
+      <div class="uc">
+        <span class="uc-icon">🏫</span>
+        <h4>โรงเรียน / มหาวิทยาลัย</h4>
+        <p>ห้องคอม 30-60 เครื่อง รีเซ็ตทุกชั่วโมงเรียน อัปเดตโปรแกรมสอนจากตัวเดียว</p>
+      </div>
+      <div class="uc">
+        <span class="uc-icon">🎮</span>
+        <h4>อินเทอร์เน็ตคาเฟ่ / เกมมิ่ง</h4>
+        <p>เครื่องลูกค้า 50-200 เครื่อง — ลูกค้าจบ session, overlay reset, เครื่องสะอาดสำหรับคนถัดไป</p>
+      </div>
+      <div class="uc">
+        <span class="uc-icon">🏦</span>
+        <h4>คีออสก์ / POS / ATM-like</h4>
+        <p>เครื่องสาธารณะที่ต้องล็อก state — ผู้ใช้แก้อะไรก็หายเมื่อรีบูต ลดงาน on-site ของช่าง</p>
+      </div>
+      <div class="uc">
+        <span class="uc-icon">🏢</span>
+        <h4>ออฟฟิศ / Call center</h4>
+        <p>พนักงานหมุนเวียน — ทุก seat บูต image เดียวกัน OS อัปเกรดทั้งบริษัทพร้อมกันคืนเดียว</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ QUICKSTART ============ -->
+<section id="quickstart" style="background: linear-gradient(180deg, transparent, rgba(34,211,238,.03));">
+  <div class="wrap">
+    <div class="section-eyebrow">เริ่มต้นใช้งาน</div>
+    <h2 class="section-title">Quickstart 3 ขั้น</h2>
+
+    <h3 style="margin: 16px 0 10px; font-size: 16px;">1. รัน server</h3>
+    <div class="code">
+<span class="c-cmd">.\scripts\start-server.ps1</span>
+
+<span class="c-comment"># Server ฟังที่ http://localhost:8080</span>
+<span class="c-comment"># Swagger UI: http://localhost:8080/swagger</span>
+    </div>
+
+    <h3 style="margin: 24px 0 10px; font-size: 16px;">2. สร้าง USB boot stick (สำหรับเครื่องที่ NIC ไม่รองรับ PXE)</h3>
+    <div class="code">
+<span class="c-cmd">.\scripts\build-usb.ps1</span> <span class="c-key">-ServerUrl</span> <span class="c-str">http://192.168.1.10:8080</span>
+
+<span class="c-comment"># จะได้ไฟล์ dist/nohddx-boot.img — flash ลง USB ด้วย Rufus / dd</span>
+    </div>
+
+    <h3 style="margin: 24px 0 10px; font-size: 16px;">3. บูตเครื่องเป้าหมาย</h3>
+    <div class="code">
+<span class="c-comment"># 1. เสียบ USB / เปิด PXE boot ใน BIOS</span>
+<span class="c-comment"># 2. เครื่องโหลด iPXE → ขอ DHCP → chainload</span>
+<span class="c-comment">#    http://&lt;server&gt;/api/boot/&lt;mac&gt;.ipxe</span>
+<span class="c-comment"># 3. NoHddX ตอบ "sanboot iscsi:..." → เครื่องบูตจาก iSCSI</span>
+<span class="c-comment"># 4. ดู dashboard เห็น client ออนไลน์ — assign image จาก WPF console</span>
+    </div>
+
+    <p style="color: var(--fg-mute); margin-top: 24px; font-size: 14.5px;">
+      อ่านเอกสารเต็มใน
+      <a href="https://github.com/xjanova/nohddx/blob/main/README.md">README บน GitHub</a>
+      และ
+      <a href="https://github.com/xjanova/nohddx/blob/main/docs/SECURITY.md">SECURITY guide</a>
+      ก่อน deploy production
+    </p>
+  </div>
+</section>
+
+<!-- ============ PRICING ============ -->
+<section id="pricing">
+  <div class="wrap">
+    <div class="section-eyebrow">แพ็กเกจ</div>
+    <h2 class="section-title">เลือกแพลนที่เหมาะกับขนาดฟลีตคุณ</h2>
+    <p class="section-sub">
+      ซอร์สโค้ดเปิดให้ใช้ฟรี (MIT-style) — แพลนแบบเสียเงินซื้อ
+      <strong>การติดตั้ง การปรับแต่ง และ support</strong>
+      เพื่อให้องค์กรของคุณใช้งานได้จริงโดยไม่ต้องมีทีม DevOps เอง
+    </p>
+
+    <div class="pricing">
+      <div class="plan">
+        <h3>Community</h3>
+        <div class="price">ฟรี</div>
+        <p class="desc">ดาวน์โหลด build เอง deploy เอง</p>
+        <ul>
+          <li>ซอร์สโค้ดทั้งหมดบน GitHub</li>
+          <li>Issue tracker บน GitHub</li>
+          <li>คุณสมบัติครบทุกอย่าง (ไม่มี feature gate)</li>
+          <li>Community support</li>
+        </ul>
+        <a href="https://github.com/xjanova/nohddx" class="btn btn-ghost">ดูบน GitHub</a>
+      </div>
+
+      <div class="plan featured">
+        <span class="tag">ขายดี</span>
+        <h3>Business</h3>
+        <div class="price">฿49,000 <small>/ ครั้ง</small></div>
+        <p class="desc">ติดตั้ง + ปรับแต่งให้ที่หน้างาน เหมาะกับ 50-200 เครื่อง</p>
+        <ul>
+          <li>ติดตั้งเซิร์ฟเวอร์และทดสอบให้</li>
+          <li>สร้าง base image จาก Windows ที่คุณใช้อยู่</li>
+          <li>เซ็ตอัป Wake-on-LAN + scheduled reset</li>
+          <li>เทรนแอดมิน 1 วัน</li>
+          <li>Email / Line support 90 วัน</li>
+        </ul>
+        <a href="#contact" class="btn btn-primary">ติดต่อสั่งซื้อ</a>
+      </div>
+
+      <div class="plan">
+        <h3>Enterprise</h3>
+        <div class="price">ติดต่อ <small>เสนอราคา</small></div>
+        <p class="desc">หลายสาขา / 500+ เครื่อง / ต้องการ HA cluster</p>
+        <ul>
+          <li>Raft multi-node cluster setup</li>
+          <li>PostgreSQL HA + backup strategy</li>
+          <li>Prometheus + Grafana monitoring</li>
+          <li>SLA + on-call support 24/7</li>
+          <li>Custom feature development</li>
+        </ul>
+        <a href="#contact" class="btn btn-ghost">ขอใบเสนอราคา</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FAQ ============ -->
+<section id="faq">
+  <div class="wrap">
+    <div class="section-eyebrow">คำถามที่พบบ่อย</div>
+    <h2 class="section-title">FAQ</h2>
+
+    <div class="faq" style="max-width: 880px;">
+      <details>
+        <summary>เครื่องลูกข่ายต้องมีสเปคขั้นต่ำเท่าไหร่?</summary>
+        <div class="answer">
+          แค่มี NIC ที่รองรับ PXE (มาตรฐานทุกเมนบอร์ดยุคใหม่)
+          ไม่ต้องมี HDD / SSD เลยก็ได้
+          ถ้า NIC เก่าไม่รองรับ PXE ใช้ USB ที่ build จาก
+          <span class="mono">build-usb.ps1</span> เสียบบูตแทนได้
+        </div>
+      </details>
+      <details>
+        <summary>เน็ตเวิร์กต้องเร็วแค่ไหน?</summary>
+        <div class="answer">
+          Gigabit Ethernet ทั้งห้องคือต่ำสุดที่แนะนำ
+          สำหรับ 30-50 เครื่องพร้อมกัน
+          ถ้ามากกว่านั้นแนะนำ 10G uplink ที่ฝั่งเซิร์ฟเวอร์
+          และ managed switch ที่มี IGMP snooping
+        </div>
+      </details>
+      <details>
+        <summary>บูต Windows ได้จริงไหม? ลิขสิทธิ์ Windows มีปัญหาหรือเปล่า?</summary>
+        <div class="answer">
+          iSCSI target ของเราพูด RFC 3720 เพียงพอที่ Windows 10/11
+          จะบูตได้จาก sanboot ปกติ — ส่วนเรื่องลิขสิทธิ์ Windows
+          เป็นความรับผิดชอบของลูกค้า (Microsoft มี VDA / RDS license สำหรับ scenario นี้)
+        </div>
+      </details>
+      <details>
+        <summary>ถ้าเซิร์ฟเวอร์ดับ เครื่องลูกข่ายทำงานต่อได้ไหม?</summary>
+        <div class="answer">
+          ไม่ได้ — เพราะดิสก์อยู่บนเซิร์ฟเวอร์ ดังนั้นแพลน Enterprise
+          จึงตั้ง Raft cluster หลายโหนดเพื่อ failover อัตโนมัติ
+          และเก็บ image ไว้บน storage redundant (RAID / Ceph)
+        </div>
+      </details>
+      <details>
+        <summary>ต่างจาก FOG Project / CCBoot / Ardence ยังไง?</summary>
+        <div class="answer">
+          NoHddX เขียนใหม่บน .NET 8 — modular, REST API จริง,
+          มี SignalR live dashboard, มี cluster mode ในตัว
+          และที่สำคัญ <strong>ซอร์สโค้ดเปิด</strong> ไม่ต้องจ่ายต่อ seat
+          ไม่ต้องผูกกับเซิร์ฟเวอร์ของ vendor
+        </div>
+      </details>
+      <details>
+        <summary>มี Linux client ไหม?</summary>
+        <div class="answer">
+          มี — โปรเจค <span class="mono">NohddX.Agent</span>
+          เป็น mini-OS Linux ที่ตอบ UDP discovery, ลงทะเบียนตัวเอง,
+          และให้แอดมินเลือก mode: persistent install / diskless USB+net / network boot
+        </div>
+      </details>
+    </div>
+  </div>
+</section>
+
+<!-- ============ CTA + CONTACT ============ -->
+<section id="contact">
+  <div class="wrap">
+    <div class="cta-banner">
+      <h2>พร้อมเปลี่ยนห้องคอมของคุณให้ดูแลตัวเองได้แล้วหรือยัง?</h2>
+      <p>ลองรันเซิร์ฟเวอร์ใน 5 นาที หรือคุยกับเราเพื่อ pilot 10 เครื่องฟรี</p>
+      <div class="ctas">
+        <a href="https://github.com/xjanova/nohddx" class="btn btn-primary">⭐ Star บน GitHub</a>
+        <a href="mailto:contact@example.com?subject=NoHddX%20Inquiry" class="btn btn-ghost">📧 ติดต่อทีมขาย</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div>© 2026 NoHddX · Open source diskless boot platform</div>
+    <div>
+      <a href="https://github.com/xjanova/nohddx">GitHub</a>
+      <a href="https://github.com/xjanova/nohddx/blob/main/README.md">README</a>
+      <a href="https://github.com/xjanova/nohddx/blob/main/docs/SECURITY.md">Security</a>
+    </div>
+  </div>
+</footer>
+
+</body>
+</html>
