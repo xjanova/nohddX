@@ -10,30 +10,89 @@ namespace NohddX.Api.Storage;
 /// <see cref="System.IO.DriveInfo"/> covers, and the
 /// <c>/api/storage/disks</c> endpoint already returns those). This is the
 /// SMART-equivalent view: model, serial, interface, temperature when
-/// available, and a per-disk health bucket derived from
-/// <c>MSStorageDriver_FailurePredictStatus</c>.
+/// available, and a per-disk health bucket derived from SMART status.
 ///
-/// Linux / macOS hosts get an empty list — the API still works, the client
-/// just sees no physical-disk rows. A future Linux implementation could
-/// shell out to <c>smartctl --json</c> and parse the output.
+/// Two backends:
+///   * Windows -> WMI (Win32_DiskDrive + MSStorageDriver_FailurePredictStatus)
+///   * Linux   -> shell out to <c>smartctl</c> if installed (JSON output)
+/// macOS or Linux without smartctl returns an empty list.
 /// </summary>
 public static class PhysicalDiskInspector
 {
     public static IReadOnlyList<PhysicalDiskResponse> Enumerate()
     {
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return Array.Empty<PhysicalDiskResponse>();
-
         try
         {
-            return EnumerateWindows();
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                return EnumerateWindows();
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+                return EnumerateLinux();
+            return Array.Empty<PhysicalDiskResponse>();
         }
         catch
         {
-            // WMI can throw under restricted accounts, in containers without
-            // the WMI service, etc. Better to return an empty list than to
-            // 500 the entire storage page.
+            // Inspection paths can throw under restricted accounts, in
+            // containers without WMI / smartctl, etc. Better to return an
+            // empty list than to 500 the entire storage page.
             return Array.Empty<PhysicalDiskResponse>();
+        }
+    }
+
+    // ── Linux: smartctl shell-out ──────────────────────────────────────
+
+    private static IReadOnlyList<PhysicalDiskResponse> EnumerateLinux()
+    {
+        var scan = RunSmartctl("--scan -j");
+        if (scan is null) return Array.Empty<PhysicalDiskResponse>();
+
+        var devices = SmartctlJsonParser.ParseScan(scan);
+        if (devices.Count == 0) return Array.Empty<PhysicalDiskResponse>();
+
+        var rows = new List<PhysicalDiskResponse>();
+        foreach (var dev in devices)
+        {
+            var info = RunSmartctl($"-a -j {dev}");
+            if (info is null) continue;
+            var parsed = SmartctlJsonParser.ParseInfo(info);
+            if (parsed is not null) rows.Add(parsed);
+        }
+        return rows;
+    }
+
+    private static string? RunSmartctl(string args)
+    {
+        try
+        {
+            using var p = new System.Diagnostics.Process
+            {
+                StartInfo = new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "smartctl",
+                    Arguments = args,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                }
+            };
+            if (!p.Start()) return null;
+
+            // smartctl returns small JSON blobs; no need to stream. Cap wait
+            // so a hung disk can't stall the whole API request.
+            if (!p.WaitForExit(5000))
+            {
+                try { p.Kill(); } catch { }
+                return null;
+            }
+            // smartctl exit codes 0-3 are "data returned, may contain warnings"
+            // and we still want the JSON. Codes 4+ are real errors.
+            if (p.ExitCode >= 4) return null;
+            return p.StandardOutput.ReadToEnd();
+        }
+        catch
+        {
+            // smartctl not installed, not in PATH, permission denied — give up
+            return null;
         }
     }
 
