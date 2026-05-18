@@ -65,11 +65,25 @@ public class StorageController : ControllerBase
     }
 
     /// <summary>
+    /// Physical disks with SMART data when the platform supports it. Windows
+    /// reads from WMI (Win32_DiskDrive + MSStorageDriver_FailurePredictStatus
+    /// + MSStorageDriver_ATAPISmartData); non-Windows returns an empty list
+    /// until a smartctl-backed implementation lands. This is the
+    /// "is my hardware about to die" view that complements the
+    /// volume-oriented <c>/disks</c> endpoint.
+    /// </summary>
+    [HttpGet("physical-disks")]
+    [ProducesResponseType(typeof(IEnumerable<PhysicalDiskResponse>), StatusCodes.Status200OK)]
+    public IActionResult GetPhysicalDisks()
+    {
+        return Ok(Storage.PhysicalDiskInspector.Enumerate());
+    }
+
+    /// <summary>
     /// Lists the physical drives the server sees, with free-space and a
     /// derived health bucket. Uses <see cref="DriveInfo"/> so the implementation
-    /// is portable across Windows and Linux without WMI / sysfs shims. SMART
-    /// temperature/error-counter data is intentionally out of scope here —
-    /// that's a future per-platform enhancement.
+    /// is portable across Windows and Linux without WMI / sysfs shims. For
+    /// physical-disk SMART data, see <c>GET /api/storage/physical-disks</c>.
     /// </summary>
     [HttpGet("disks")]
     [ProducesResponseType(typeof(IEnumerable<DiskInfoResponse>), StatusCodes.Status200OK)]

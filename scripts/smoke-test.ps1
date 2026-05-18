@@ -99,6 +99,12 @@ Assert "storage/disks returns at least one drive" {
     return ($disks -ne $null -and $disks.Count -ge 1 -and ($disks[0].PSObject.Properties.Name -contains "device"))
 }
 
+Assert "storage/physical-disks responds (may be empty on non-Windows)" {
+    $pd = Invoke-Api GET "/api/storage/physical-disks"
+    # On Windows we expect rows; on other platforms an empty array. Either is valid.
+    return ($pd -ne $null)
+}
+
 Assert "monitoring/health enumerates components" {
     $h = Invoke-Api GET "/api/monitoring/health"
     return ($h.components -ne $null -and $h.components.Count -ge 1)

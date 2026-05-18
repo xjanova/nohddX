@@ -244,6 +244,19 @@ public sealed class NohddxApiClient : IDisposable
         }
     }
 
+    public async Task<IReadOnlyList<PhysicalDiskResponse>> GetPhysicalDisksAsync(CancellationToken ct = default)
+    {
+        try
+        {
+            return await _http.GetFromJsonAsync<List<PhysicalDiskResponse>>("api/storage/physical-disks", JsonOpts, ct)
+                ?? new List<PhysicalDiskResponse>();
+        }
+        catch
+        {
+            return Array.Empty<PhysicalDiskResponse>();
+        }
+    }
+
     // ─── Monitoring ────────────────────────────────────────────────────────
 
     public async Task<IReadOnlyList<AuditLogResponse>> GetAuditAsync(int take = 200, CancellationToken ct = default)

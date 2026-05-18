@@ -35,3 +35,21 @@ public record DiskInfoResponse(
     double UsagePercent,
     bool IsReady,
     string Health);
+
+/// <summary>
+/// Physical disk row returned by <c>/api/storage/physical-disks</c>. Comes
+/// from WMI on Windows (model, serial, SMART status, temperature when
+/// available). Empty on non-Windows until a smartctl-backed Linux path
+/// lands.
+/// </summary>
+public record PhysicalDiskResponse(
+    string Model,
+    string? SerialNumber,
+    string? InterfaceType,
+    string? MediaType,
+    long? SizeBytes,
+    uint? TemperatureCelsius,
+    string Status,
+    string Health,
+    bool PredictFailure,
+    string? SmartReason);

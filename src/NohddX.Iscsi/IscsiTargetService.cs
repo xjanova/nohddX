@@ -758,44 +758,19 @@ public class IscsiTargetService : BackgroundService, IIscsiTargetManager
     {
         var bytes = pdu.ToBytes();
 
+        // Login PDUs are never digested per RFC 3720 — the digest mode only
+        // becomes effective AFTER login transit completes. The session flags
+        // gate everything else.
         bool digestThisPdu =
             pdu.Opcode != IscsiConstants.OpcodeLoginResponse &&
             pdu.Opcode != IscsiConstants.OpcodeLoginRequest;
         bool wantHeader = digestThisPdu && session.HeaderDigestEnabled;
-        bool wantData = digestThisPdu && session.DataDigestEnabled && bytes.Length > IscsiConstants.HeaderSize;
+        bool wantData = digestThisPdu && session.DataDigestEnabled;
 
         await session.WriteLock.WaitAsync(ct);
         try
         {
-            if (!wantHeader && !wantData)
-            {
-                // Fast path: no digests, single write.
-                await stream.WriteAsync(bytes, ct);
-                await stream.FlushAsync(ct);
-                return;
-            }
-
-            // Slow path: write BHS, optional header digest, padded data, optional data digest.
-            var bhs = bytes.AsMemory(0, IscsiConstants.HeaderSize);
-            var paddedData = bytes.AsMemory(IscsiConstants.HeaderSize);
-
-            await stream.WriteAsync(bhs, ct);
-            if (wantHeader)
-            {
-                uint hd = Crc32C.Compute(bhs.Span);
-                await stream.WriteAsync(BigEndian(hd), ct);
-            }
-
-            if (paddedData.Length > 0)
-            {
-                await stream.WriteAsync(paddedData, ct);
-                if (wantData)
-                {
-                    uint dd = Crc32C.Compute(paddedData.Span);
-                    await stream.WriteAsync(BigEndian(dd), ct);
-                }
-            }
-
+            await IscsiPdu.WriteFramedAsync(stream, bytes, wantHeader, wantData, ct);
             await stream.FlushAsync(ct);
         }
         finally
@@ -803,14 +778,6 @@ public class IscsiTargetService : BackgroundService, IIscsiTargetManager
             session.WriteLock.Release();
         }
     }
-
-    private static byte[] BigEndian(uint v) => new[]
-    {
-        (byte)(v >> 24),
-        (byte)(v >> 16),
-        (byte)(v >> 8),
-        (byte)v,
-    };
 
     // ------------------------------------------------------------------
     // Network I/O helpers

@@ -235,6 +235,72 @@ public class IscsiPdu
     }
 
     /// <summary>
+    /// Write a PDU's wire bytes to <paramref name="stream"/>, splicing in
+    /// CRC32C HeaderDigest / DataDigest values when negotiated. Pulled out
+    /// of <c>IscsiTargetService.SendPduAsync</c> so the byte-exact framing
+    /// can be unit-tested without a TCP socket — bugs in this code path are
+    /// silent: an off-by-one in the digest offset means the initiator drops
+    /// every PDU and the boot fails halfway through.
+    ///
+    /// Layout when both digests enabled:
+    /// <pre>
+    ///   [ 48-byte BHS ] [ 4-byte HD ] [ padded data ] [ 4-byte DD ]
+    /// </pre>
+    /// HeaderDigest covers ONLY the BHS bytes (not the digest itself).
+    /// DataDigest covers the padded data segment, not the headers.
+    /// </summary>
+    public static async Task WriteFramedAsync(
+        Stream stream,
+        ReadOnlyMemory<byte> pduBytes,
+        bool headerDigest,
+        bool dataDigest,
+        CancellationToken ct = default)
+    {
+        if (pduBytes.Length < IscsiConstants.HeaderSize)
+            throw new ArgumentException("PDU bytes must include at least the 48-byte BHS.", nameof(pduBytes));
+
+        var bhs = pduBytes.Slice(0, IscsiConstants.HeaderSize);
+        var paddedData = pduBytes.Slice(IscsiConstants.HeaderSize);
+
+        // Fast path: no digests requested — single contiguous write so the
+        // operating system only sends one TCP segment.
+        if (!headerDigest && !(dataDigest && paddedData.Length > 0))
+        {
+            await stream.WriteAsync(pduBytes, ct);
+            return;
+        }
+
+        await stream.WriteAsync(bhs, ct);
+        if (headerDigest)
+        {
+            uint hd = Crc32C.Compute(bhs.Span);
+            await stream.WriteAsync(Uint32BigEndian(hd), ct);
+        }
+
+        if (paddedData.Length > 0)
+        {
+            await stream.WriteAsync(paddedData, ct);
+            if (dataDigest)
+            {
+                uint dd = Crc32C.Compute(paddedData.Span);
+                await stream.WriteAsync(Uint32BigEndian(dd), ct);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Encodes a uint as 4 big-endian bytes. Used for digest values that go
+    /// on the wire after the BHS / padded data per RFC 3720 §10.2.2.
+    /// </summary>
+    internal static byte[] Uint32BigEndian(uint v) => new[]
+    {
+        (byte)(v >> 24),
+        (byte)(v >> 16),
+        (byte)(v >> 8),
+        (byte)v,
+    };
+
+    /// <summary>
     /// Build an R2T (Ready To Transfer) PDU. Issued in response to a SCSI
     /// Write that didn't carry all of its data inline — tells the initiator
     /// "send me bytes [bufferOffset, bufferOffset+desiredLength) using

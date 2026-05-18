@@ -27,26 +27,43 @@ public partial class StorageView : UserControl
         StoragePoolsList.ItemsSource = (health?.Pools ?? Array.Empty<StoragePoolResponse>())
             .Select(ToPool).ToList();
 
-        // Real disk enumeration from the server (DriveInfo-based; portable).
-        var disks = await App.ApiClient.GetDisksAsync();
-        if (disks.Count == 0)
+        // Prefer the physical-disk view (model + serial + SMART temp + health
+        // bucket). When WMI is unavailable — non-Windows, restricted account,
+        // container without WMI service — fall back to the portable
+        // DriveInfo-based volume list.
+        var physical = await App.ApiClient.GetPhysicalDisksAsync();
+        if (physical.Count > 0)
         {
-            DiskHealthGrid.ItemsSource = new[]
-            {
-                new DiskHealth("(none)", "Server reported no drives", "—", "—", "—", "Good")
-            };
+            DiskHealthGrid.ItemsSource = physical.Select(p => new DiskHealth(
+                Device: p.Model,
+                Model: $"{p.MediaType ?? "—"} ({p.InterfaceType ?? "—"})" +
+                       (string.IsNullOrEmpty(p.SerialNumber) ? "" : $" S/N {p.SerialNumber}"),
+                Size: p.SizeBytes is long s ? FormatSize(s) : "—",
+                Temperature: p.TemperatureCelsius is uint t ? $"{t}°C" : "—",
+                Pool: p.PredictFailure ? "FAILURE PREDICTED" : "—",
+                Health: p.Health)).ToList();
         }
         else
         {
-            DiskHealthGrid.ItemsSource = disks.Select(d => new DiskHealth(
-                Device: d.Device,
-                Model: $"{d.DriveType} ({d.DriveFormat})" +
-                       (string.IsNullOrEmpty(d.VolumeLabel) ? "" : $" — {d.VolumeLabel}"),
-                Size: FormatSize(d.TotalBytes),
-                // Temperature column reused for usage% until SMART exists.
-                Temperature: $"{d.UsagePercent:0.0}%",
-                Pool: "—",
-                Health: d.Health)).ToList();
+            var disks = await App.ApiClient.GetDisksAsync();
+            if (disks.Count == 0)
+            {
+                DiskHealthGrid.ItemsSource = new[]
+                {
+                    new DiskHealth("(none)", "Server reported no drives", "—", "—", "—", "Good")
+                };
+            }
+            else
+            {
+                DiskHealthGrid.ItemsSource = disks.Select(d => new DiskHealth(
+                    Device: d.Device,
+                    Model: $"{d.DriveType} ({d.DriveFormat})" +
+                           (string.IsNullOrEmpty(d.VolumeLabel) ? "" : $" — {d.VolumeLabel}"),
+                    Size: FormatSize(d.TotalBytes),
+                    Temperature: $"{d.UsagePercent:0.0}%",
+                    Pool: "—",
+                    Health: d.Health)).ToList();
+            }
         }
 
         // Image storage breakdown — derive from /api/images. We don't have a
